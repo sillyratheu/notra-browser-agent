@@ -14,27 +14,30 @@ if "browser_installed" not in st.session_state:
 st.set_page_config(page_title="NotRa Live Project Agent", page_icon="🤖", layout="wide")
 
 st.title("🤖 NotRa Live Project Agent")
-st.caption("🟢 Smart understanding + Persistent session + Live refreshing window stream")
+st.caption("🟢 Zero-Disk Memory Stream + Persistent Session + Smart Understanding")
 
-# Initialize persistent browser session in Streamlit session_state
-if "playwright_active" not in st.session_state:
-    p = sync_playwright().start()
-    browser = p.chromium.launch(headless=True)
-    context = browser.new_context(viewport={"width": 1280, "height": 800})
-    page = context.new_page()
-    
-    st.session_state.p = p
-    st.session_state.browser = browser
-    st.session_state.context = context
-    st.session_state.page = page
-    st.session_state.playwright_active = True
+# Safe persistent browser session initializer (Fixes connection close error)
+def get_or_create_browser_session():
+    if "playwright_active" not in st.session_state or st.session_state.get("page") is None:
+        try:
+            p = sync_playwright().start()
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+            
+            st.session_state.p = p
+            st.session_state.browser = browser
+            st.session_state.context = context
+            st.session_state.page = page
+            st.session_state.playwright_active = True
+        except Exception as e:
+            print(f"Session init error: {e}")
+    return st.session_state.get("page")
 
-page = st.session_state.page
-
-# Sidebar controls for project session
+# Sidebar controls
 with st.sidebar:
     st.header("📂 Project Session Hub")
-    st.markdown("Session active thakbe. Poroborti command age-er state thekei kaj korbe.")
+    st.markdown("Session active thakbe. Data server-e save hoy na, tai traffic-er kono voy nei.")
     if st.button("🔄 Reset Project Session"):
         try:
             st.session_state.browser.close()
@@ -54,16 +57,17 @@ if st.button("Execute Task"):
         st.warning("Please enter a command first!")
     else:
         status_box = st.empty()
-        
-        # Phase 1: Understanding command first
         status_box.info("🧠 NotRa is understanding your command...")
-        time.sleep(1) # Simulation of thinking/understanding phase
+        time.sleep(1)
         
         try:
+            page = get_or_create_browser_session()
+            if not page:
+                raise Exception("Failed to initialize browser session.")
+
             cmd = task_command.lower()
             status_box.info(f"🚀 NotRa is executing: '{task_command}'...")
 
-            # Navigation / Action logic based on persistent state
             if "http" in cmd or ".gd" in cmd or ".com" in cmd or ".net" in cmd:
                 words = task_command.split()
                 url = next((w for w in words if w.startswith("http") or "." in w), "")
@@ -86,7 +90,6 @@ if st.button("Execute Task"):
                     page.keyboard.press('Enter')
                     page.wait_for_timeout(3000)
                 
-                # Automatically click the first video if requested
                 try:
                     page.locator('ytd-video-renderer #video-title').first.click()
                     page.wait_for_timeout(3000)
@@ -100,22 +103,20 @@ if st.button("Execute Task"):
                 page.keyboard.type(task_command)
                 page.wait_for_timeout(2000)
 
-            # Phase 2: Live Refreshing Window Stream (Single slot updating every 3 seconds)
             st.subheader("📺 Live Browser Window Stream")
-            image_placeholder = st.empty() # Dynamic slot that updates every 3 seconds
+            image_placeholder = st.empty()
 
             for i in range(5):
-                page.wait_for_timeout(3000) # Wait 3 seconds
+                page.wait_for_timeout(3000)
                 current_url = page.url
-                ss_path = f"live_frame_{time.time()}.png"
-                page.screenshot(path=ss_path, full_page=False)
                 
-                # Replace the image in real-time like a live stream frame
-                image_placeholder.image(ss_path, caption=f"Live View - Step {i+1}/5 | URL: {current_url}", use_column_width=True)
+                # IN-MEMORY SCREENSHOT (Zero disk storage, safe for heavy traffic!)
+                screenshot_bytes = page.screenshot(type="png", full_page=False)
+                
+                image_placeholder.image(screenshot_bytes, caption=f"Live View - Step {i+1}/5 | URL: {current_url}", use_column_width=True)
                 status_box.info(f"NotRa is working... Live frame updated ({i+1}/5)")
 
             status_box.success("Task done Boss! 🎉 NotRa has successfully executed your command.")
 
         except Exception as e:
             status_box.error(f"Execution Error: {e}")
-    
