@@ -1,11 +1,9 @@
 import streamlit as st
 from playwright.sync_api import sync_playwright
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
 import os
 import requests
 
-# Install playwright chromium automatically if missing
+# Ensure playwright chromium is installed
 if "browser_installed" not in st.session_state:
     try:
         os.system("playwright install chromium")
@@ -16,65 +14,54 @@ if "browser_installed" not in st.session_state:
 st.set_page_config(page_title="NotRa Browser Agent", page_icon="🌐", layout="centered")
 
 st.title("🌐 NotRa Autonomous Browser Agent")
-st.caption("🟢 Powered by local Qwen-0.5B model")
+st.caption("🟢 Universal AI Browser Automation")
 
-@st.cache_resource
-def load_parser_model():
-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16,
-        low_cpu_mem_usage=True
-    )
-    return tokenizer, model
-
-tokenizer, model = load_parser_model()
-
-def parse_command_locally(command):
-    try:
-        messages = [
-            {"role": "system", "content": "You are a browser command parser. Extract the clean search query or URL from the user command. Output only the core keyword."},
-            {"role": "user", "content": command}
-        ]
-        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = tokenizer([text], return_tensors="pt")
-        with torch.no_grad():
-            outputs = model.generate(**inputs, max_new_tokens=30, temperature=0.3, do_sample=True)
-        res = tokenizer.decode(outputs[0][len(inputs.input_ids[0]):], skip_special_tokens=True)
-        return res.strip()
-    except Exception as e:
-        print(f"Parser error: {e}")
-        return command
-
-command = st.text_input("Enter command (e.g., 'go to youtube and search Patar bashori'):")
+command = st.text_input("Enter any command (e.g., 'search Patar bashori on YouTube', 'open ramims.work.gd', etc.):")
 
 if st.button("Execute Command"):
     if not command:
         st.warning("Please enter a command first!")
     else:
-        with st.spinner(f"NotRa local Qwen is analyzing & executing: '{command}'..."):
+        with st.spinner(f"NotRa is executing: '{command}'..."):
             try:
-                parsed_query = parse_command_locally(command)
-                
                 with sync_playwright() as p:
                     browser = p.chromium.launch(headless=True)
-                    page = browser.new_page()
+                    page = browser.new_page(viewport={"width": 1280, "height": 800})
 
-                    if "youtube" in command.lower() or "yt" in command.lower():
-                        page.goto("https://www.youtube.com")
-                        q = command.lower().replace("go to youtube", "").replace("search", "").replace("on youtube", "").replace("youtube", "").strip()
-                        if not q: q = parsed_query
-                        page.fill('input[name="search_query"]', q)
-                        page.press('input[name="search_query"]', 'Enter')
-                        page.wait_for_timeout(4000)
-                    elif "http" in command.lower() or ".gd" in command.lower() or ".com" in command.lower():
+                    cmd_lower = command.lower()
+
+                    # 1. Handle URL / Website opening directly
+                    if "http" in cmd_lower or ".gd" in cmd_lower or ".com" in cmd_lower or ".net" in cmd_lower or ".org" in cmd_lower:
                         words = command.split()
                         target_url = next((w for w in words if w.startswith("http") or "." in w), "https://google.com")
                         if not target_url.startswith("http"):
                             target_url = "https://" + target_url
                         page.goto(target_url)
                         page.wait_for_timeout(3000)
+
+                    # 2. Handle YouTube Search automatically
+                    elif "youtube" in cmd_lower or "yt" in cmd_lower or "play" in cmd_lower:
+                        page.goto("https://www.youtube.com")
+                        page.wait_for_timeout(2000)
+                        
+                        # Extract search query intelligently
+                        q = cmd_lower.replace("go to", "").replace("search", "").replace("on youtube", "").replace("youtube", "").replace("yt", "").replace("play", "").strip()
+                        if not q:
+                            q = "trending"
+                        
+                        try:
+                            # Try multiple possible YouTube search input selectors
+                            page.fill('input[name="search_query"]', q)
+                        except:
+                            try:
+                                page.fill('input#search', q)
+                            except:
+                                page.keyboard.type(q)
+                                
+                        page.keyboard.press('Enter')
+                        page.wait_for_timeout(4000)
+
+                    # 3. Handle any general search or task via Google
                     else:
                         page.goto(f"https://www.google.com/search?q={requests.utils.quote(command)}")
                         page.wait_for_timeout(3000)
@@ -89,4 +76,4 @@ if st.button("Execute Command"):
 
             except Exception as e:
                 st.error(f"Execution Error: {e}")
-                
+                    
