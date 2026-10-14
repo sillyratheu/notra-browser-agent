@@ -13,12 +13,12 @@ if "browser_installed" not in st.session_state:
 st.set_page_config(page_title="NotRa Browser Agent", page_icon="🤖", layout="wide")
 
 st.title("🤖 NotRa Autonomous Browser Agent")
-st.caption("🟢 Built and Owned exclusively by Ramim • Universal Agent with Login & Captcha Alerts")
+st.caption("🟢 Built and Owned exclusively by Ramim • Universal Agent with Modern Browser Mode")
 
 if "action_history" not in st.session_state:
     st.session_state.action_history = []
 
-# Sidebar for Login Credentials Helper
+# Sidebar for Standard Login Credentials Helper
 with st.sidebar:
     st.header("🔑 Login & Auth Helper")
     st.markdown("Kono site-e login ba sign-up lagbe, ekhane info diye dile agent automatic fill-up korbe.")
@@ -26,7 +26,7 @@ with st.sidebar:
     input_pass = st.text_input("Password", type="password")
 
 # Main Command Box (Universal Tasks)
-task_command = st.text_input("Enter ANY task command (e.g., 'play a song on youtube', 'open github and create repo', 'search python tutorials'):")
+task_command = st.text_input("Enter ANY task command (e.g., 'play a song on youtube', 'open github', 'search python tutorials'):")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -42,8 +42,20 @@ if st.button("Run Browser Agent"):
         with st.spinner(f"NotRa is executing universal task: '{task_command}'..."):
             try:
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=True)
-                    context = browser.new_context(viewport={"width": 1280, "height": 800})
+                    # Modern browser flags and User-Agent to fix YouTube "old browser" error
+                    browser = p.chromium.launch(
+                        headless=True,
+                        args=[
+                            "--disable-blink-features=AutomationControlled",
+                            "--no-sandbox",
+                            "--disable-setuid-sandbox"
+                        ]
+                    )
+                    
+                    context = browser.new_context(
+                        viewport={"width": 1280, "height": 800},
+                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                    )
                     page = context.new_page()
 
                     cmd = task_command.lower()
@@ -115,9 +127,8 @@ if st.button("Run Browser Agent"):
                     is_captcha_required = "captcha" in page_body_text or "robot" in page_body_text or "verify you are human" in page_body_text
 
                     if is_auth_required or is_captcha_required:
-                        st.error(f"⚠️ **Attention User** NotRa encountered a Login/Sign-up or Captcha block at this link: [{current_url}]({current_url}). Please sign up / login or solve captcha!")
+                        st.error(f"⚠️ **Attention Ramim!** NotRa encountered a Login/Sign-up or Captcha block at this link: [{current_url}]({current_url}). Please sign up / login or solve captcha!")
                     else:
-                        # Auto Login Attempt if credentials provided in sidebar and form exists
                         if input_user and input_pass and ("login" in current_url.lower() or "signin" in current_url.lower()):
                             try:
                                 page.fill('input[type="email"], input[name*="user"], input[name*="login"]', input_user)
@@ -150,3 +161,4 @@ if st.session_state.action_history:
             st.image(img_p, caption=desc, use_container_width=True)
 else:
     st.info("Execute a task above to see the live browser view.")
+        
