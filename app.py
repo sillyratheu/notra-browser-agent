@@ -96,5 +96,69 @@ if st.button("Run Browser Agent"):
                             except:
                                 pass
                     else:
-                        page.goto(f"
+                        encoded_query = requests.utils.quote(task_command)
+                        google_url = f"https://www.google.com/search?q={encoded_query}"
+                        page.goto(google_url)
+                        page.wait_for_timeout(3000)
+                        if "open" in cmd or "go to" in cmd:
+                            try:
+                                page.locator('h3').first.click()
+                                page.wait_for_timeout(3000)
+                            except:
+                                pass
+
+                    # 3. Handle Extra Actions (Scroll, Click, etc.)
+                    if user_action == "Scroll Down" or "scroll down" in cmd:
+                        page.mouse.wheel(0, 800)
+                        page.wait_for_timeout(2000)
+                    elif user_action == "Scroll Up":
+                        page.mouse.wheel(0, -800)
+                        page.wait_for_timeout(2000)
+                    elif user_action == "Click First Video / Result":
+                        try:
+                            page.locator('h3, ytd-video-renderer #video-title').first.click()
+                            page.wait_for_timeout(3000)
+                        except:
+                            pass
+                    elif custom_click_text:
+                        try:
+                            page.get_by_text(custom_click_text, exact=False).first.click()
+                            page.wait_for_timeout(3000)
+                        except:
+                            pass
+
+                    # Capture Live View Screenshot
+                    img1 = "step1.png"
+                    page.screenshot(path=img1, full_page=False)
+                    st.session_state.action_history.append((f"Intent Understood & Executed: {llm_parsed}", img1))
+
+                    # Auto Login Check
+                    if "login" in page.url.lower() or "signin" in page.url.lower():
+                        if input_user and input_pass:
+                            page.fill('input[type="email"], input[name*="user"], input[name*="login"]', input_user)
+                            page.fill('input[type="password"]', input_pass)
+                            page.keyboard.press('Enter')
+                            page.wait_for_timeout(4000)
+                            img_login = "step_login.png"
+                            page.screenshot(path=img_login, full_page=False)
+                            st.session_state.action_history.append(("Auto-Filled Login & Logged In", img_login))
+
+                    browser.close()
+                    st.success("Task completed successfully!")
+
+            except Exception as e:
+                st.error(f"Agent Execution Error: {e}")
+
+# Live Stream Window Display with Manual Refresh Button
+st.subheader("🖥️ Live Browser Action Stream")
+if st.button("🔄 Refresh Live View"):
+    st.rerun()
+
+if st.session_state.action_history:
+    for desc, img_p in st.session_state.action_history:
+        st.markdown(f"**Status:** {desc}")
+        if os.path.exists(img_p):
+            st.image(img_p, caption=desc, use_container_width=True)
+else:
+    st.info("Execute a task above to see the live browser view.")
     
