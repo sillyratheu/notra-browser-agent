@@ -1,0 +1,7 @@
+streamlit
+playwright
+torch
+torchvision
+transformers
+accelerate
+requests
