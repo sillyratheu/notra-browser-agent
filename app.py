@@ -14,42 +14,22 @@ if "browser_installed" not in st.session_state:
 st.set_page_config(page_title="NotRa Live Project Agent", page_icon="🤖", layout="wide")
 
 st.title("🤖 NotRa Live Project Agent")
-st.caption("🟢 Zero-Disk Memory Stream + Persistent Session + Smart Understanding")
+st.caption("🟢 Persistent Session + Live Stream + Zero-Disk Memory")
 
-# Safe persistent browser session initializer (Fixes connection close error)
-def get_or_create_browser_session():
-    if "playwright_active" not in st.session_state or st.session_state.get("page") is None:
-        try:
-            p = sync_playwright().start()
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport={"width": 1280, "height": 800})
-            page = context.new_page()
-            
-            st.session_state.p = p
-            st.session_state.browser = browser
-            st.session_state.context = context
-            st.session_state.page = page
-            st.session_state.playwright_active = True
-        except Exception as e:
-            print(f"Session init error: {e}")
-    return st.session_state.get("page")
+# Persistent browser session manager
+def get_browser():
+    if "browser_session" not in st.session_state:
+        p = sync_playwright().start()
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(viewport={"width": 1280, "height": 800})
+        page = context.new_page()
+        st.session_state.p = p
+        st.session_state.browser = browser
+        st.session_state.page = page
+    return st.session_state.page
 
-# Sidebar controls
-with st.sidebar:
-    st.header("📂 Project Session Hub")
-    st.markdown("Session active thakbe. Data server-e save hoy na, tai traffic-er kono voy nei.")
-    if st.button("🔄 Reset Project Session"):
-        try:
-            st.session_state.browser.close()
-            st.session_state.p.stop()
-        except:
-            pass
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.success("Session reset done! Please refresh page.")
-        st.rerun()
+page = get_browser()
 
-# Main Command Box
 task_command = st.text_input("Enter command for NotRa (e.g., 'open youtube and play first video', 'scroll down'):")
 
 if st.button("Execute Task"):
@@ -57,16 +37,10 @@ if st.button("Execute Task"):
         st.warning("Please enter a command first!")
     else:
         status_box = st.empty()
-        status_box.info("🧠 NotRa is understanding your command...")
-        time.sleep(1)
+        status_box.info(f"🚀 NotRa is executing: '{task_command}'...")
         
         try:
-            page = get_or_create_browser_session()
-            if not page:
-                raise Exception("Failed to initialize browser session.")
-
             cmd = task_command.lower()
-            status_box.info(f"🚀 NotRa is executing: '{task_command}'...")
 
             if "http" in cmd or ".gd" in cmd or ".com" in cmd or ".net" in cmd:
                 words = task_command.split()
@@ -103,20 +77,18 @@ if st.button("Execute Task"):
                 page.keyboard.type(task_command)
                 page.wait_for_timeout(2000)
 
-            st.subheader("📺 Live Browser Window Stream")
-            image_placeholder = st.empty()
-
-            for i in range(5):
-                page.wait_for_timeout(3000)
-                current_url = page.url
-                
-                # IN-MEMORY SCREENSHOT (Zero disk storage, safe for heavy traffic!)
-                screenshot_bytes = page.screenshot(type="png", full_page=False)
-                
-                image_placeholder.image(screenshot_bytes, caption=f"Live View - Step {i+1}/5 | URL: {current_url}", use_column_width=True)
-                status_box.info(f"NotRa is working... Live frame updated ({i+1}/5)")
-
-            status_box.success("Task done Boss! 🎉 NotRa has successfully executed your command.")
+            status_box.success("Task executed successfully!")
 
         except Exception as e:
             status_box.error(f"Execution Error: {e}")
+
+# Live Stream Window Display (Using use_container_width instead of use_column_width)
+st.subheader("📺 Live Browser Window Stream")
+if st.button("🔄 Refresh Live View"):
+    st.rerun()
+
+try:
+    current_url = page.url
+    screenshot_bytes = page.screenshot(type="png", full_page=False)
+    st.image(screenshot_bytes, caption=f"Current Live View | URL: {
+        
