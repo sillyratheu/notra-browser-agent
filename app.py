@@ -10,23 +10,23 @@ if "browser_installed" not in st.session_state:
         pass
     st.session_state.browser_installed = True
 
-st.set_page_config(page_title="NotRa Autonomous Agent", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="NotRa Browser Agent", page_icon="🤖", layout="wide")
 
-st.title("🤖 NotRa Smart AI Browser Agent")
-st.caption("🟢 Live View Refresh + Real Human Actions (Scroll/Click/Play) + Smart Qwen Parser")
+st.title("🤖 NotRa Autonomous Browser Agent")
+st.caption("🟢 Built and Owned exclusively by Ramim • Universal Agent with Login & Captcha Alerts")
 
 if "action_history" not in st.session_state:
     st.session_state.action_history = []
 
-# Sidebar for Login Credentials
+# Sidebar for Login Credentials Helper
 with st.sidebar:
     st.header("🔑 Login & Auth Helper")
     st.markdown("Kono site-e login ba sign-up lagbe, ekhane info diye dile agent automatic fill-up korbe.")
     input_user = st.text_input("Username / Email")
     input_pass = st.text_input("Password", type="password")
 
-# Main Command Box
-task_command = st.text_input("Enter any command (e.g., 'play a lofi song on youtube', 'scroll down', 'click on sign in'):")
+# Main Command Box (Universal Tasks)
+task_command = st.text_input("Enter ANY task command (e.g., 'play a song on youtube', 'open github and create repo', 'search python tutorials'):")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -34,33 +34,13 @@ with col1:
 with col2:
     custom_click_text = st.text_input("Or Click Element by Text (optional):", "")
 
-# Smart Qwen LLM Parser
-def parse_command_with_qwen(command):
-    API_URL = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-0.5B-Instruct"
-    payload = {
-        "inputs": f"Analyze this browser command: '{command}'. Determine if it's a search, play video, scroll, or navigation task. Reply in short.",
-        "parameters": {"max_new_tokens": 40}
-    }
-    try:
-        response = requests.post(API_URL, json=payload, timeout=6)
-        if response.status_code == 200:
-            res = response.json()
-            if isinstance(res, list) and len(res) > 0:
-                return res[0].get("generated_text", command)
-    except Exception as e:
-        print(f"LLM Parse Error: {e}")
-    return command
-
 if st.button("Run Browser Agent"):
     if not task_command:
         st.warning("Please enter a command first!")
     else:
         st.session_state.action_history = []
-        with st.spinner(f"NotRa is analyzing and executing: '{task_command}'..."):
+        with st.spinner(f"NotRa is executing universal task: '{task_command}'..."):
             try:
-                # 1. Understand command first using Qwen LLM parser
-                llm_parsed = parse_command_with_qwen(task_command)
-                
                 with sync_playwright() as p:
                     browser = p.chromium.launch(headless=True)
                     context = browser.new_context(viewport={"width": 1280, "height": 800})
@@ -68,7 +48,7 @@ if st.button("Run Browser Agent"):
 
                     cmd = task_command.lower()
 
-                    # 2. Smart Navigation & Action Execution
+                    # 1. Universal Navigation & Task Execution
                     if "http" in cmd or ".gd" in cmd or ".com" in cmd or ".net" in cmd or ".org" in cmd:
                         words = task_command.split()
                         url = next((w for w in words if w.startswith("http") or "." in w), "https://google.com")
@@ -77,18 +57,18 @@ if st.button("Run Browser Agent"):
                         page.wait_for_timeout(3000)
                     elif "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
                         page.goto("https://www.youtube.com")
-                        page.wait_for_timeout(2000)
-                        q = cmd.replace("go to", "").replace("search", "").replace("on youtube", "").replace("youtube", "").replace("yt", "").replace("play", "").replace("video", "").strip()
+                        page.wait_for_timeout(2500)
+                        
+                        q = cmd.replace("open youtube and play", "").replace("play", "").replace("open", "").replace("search", "").replace("on youtube", "").replace("youtube", "").replace("yt", "").replace("video", "").replace("the", "").replace("first", "").strip()
                         if not q: q = "trending music"
                         
                         try:
                             page.fill('input[name="search_query"]', q)
+                            page.keyboard.press('Enter')
+                            page.wait_for_timeout(4000)
                         except:
-                            page.keyboard.type(q)
-                        page.keyboard.press('Enter')
-                        page.wait_for_timeout(4000)
+                            pass
                         
-                        # Real human-like action: Automatically click & play the first video if requested!
                         if "play" in cmd or "video" in cmd:
                             try:
                                 page.locator('ytd-video-renderer #video-title').first.click()
@@ -107,7 +87,7 @@ if st.button("Run Browser Agent"):
                             except:
                                 pass
 
-                    # 3. Handle Extra Actions (Scroll, Click, etc.)
+                    # 2. Handle Extra Actions
                     if user_action == "Scroll Down" or "scroll down" in cmd:
                         page.mouse.wheel(0, 800)
                         page.wait_for_timeout(2000)
@@ -127,24 +107,33 @@ if st.button("Run Browser Agent"):
                         except:
                             pass
 
+                    # 3. Intelligent Check for Login, Sign up, or Captcha
+                    current_url = page.url
+                    page_body_text = page.inner_text("body").lower()
+                    
+                    is_auth_required = "login" in current_url.lower() or "signin" in current_url.lower() or "signup" in current_url.lower()
+                    is_captcha_required = "captcha" in page_body_text or "robot" in page_body_text or "verify you are human" in page_body_text
+
+                    if is_auth_required or is_captcha_required:
+                        st.error(f"⚠️ **Attention User** NotRa encountered a Login/Sign-up or Captcha block at this link: [{current_url}]({current_url}). Please sign up / login or solve captcha!")
+                    else:
+                        # Auto Login Attempt if credentials provided in sidebar and form exists
+                        if input_user and input_pass and ("login" in current_url.lower() or "signin" in current_url.lower()):
+                            try:
+                                page.fill('input[type="email"], input[name*="user"], input[name*="login"]', input_user)
+                                page.fill('input[type="password"]', input_pass)
+                                page.keyboard.press('Enter')
+                                page.wait_for_timeout(4000)
+                            except:
+                                pass
+
                     # Capture Live View Screenshot
                     img1 = "step1.png"
                     page.screenshot(path=img1, full_page=False)
-                    st.session_state.action_history.append((f"Intent Understood & Executed: {llm_parsed}", img1))
-
-                    # Auto Login Check
-                    if "login" in page.url.lower() or "signin" in page.url.lower():
-                        if input_user and input_pass:
-                            page.fill('input[type="email"], input[name*="user"], input[name*="login"]', input_user)
-                            page.fill('input[type="password"]', input_pass)
-                            page.keyboard.press('Enter')
-                            page.wait_for_timeout(4000)
-                            img_login = "step_login.png"
-                            page.screenshot(path=img_login, full_page=False)
-                            st.session_state.action_history.append(("Auto-Filled Login & Logged In", img_login))
+                    st.session_state.action_history.append((f"Universal task executed successfully for Ramim (URL: {current_url})", img1))
 
                     browser.close()
-                    st.success("Task completed successfully!")
+                    st.success("Task processed successfully by NotRa!")
 
             except Exception as e:
                 st.error(f"Agent Execution Error: {e}")
@@ -161,4 +150,3 @@ if st.session_state.action_history:
             st.image(img_p, caption=desc, use_container_width=True)
 else:
     st.info("Execute a task above to see the live browser view.")
-    
