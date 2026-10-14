@@ -1,7 +1,6 @@
 import streamlit as st
 from playwright.sync_api import sync_playwright
 import os
-import requests
 import time
 
 if "browser_installed" not in st.session_state:
@@ -14,24 +13,36 @@ if "browser_installed" not in st.session_state:
 st.set_page_config(page_title="NotRa Live Project Agent", page_icon="🤖", layout="wide")
 
 st.title("🤖 NotRa Live Project Agent")
-st.caption("🟢 Persistent Session + Live Stream + Zero-Disk Memory")
+st.caption("🟢 Bulletproof Auto-Recovery Session + Manual Refresh")
 
-# Robust browser session manager to prevent connection close
-def get_browser():
-    if "p" not in st.session_state or "browser" not in st.session_state or "page" not in st.session_state:
-        try:
-            p = sync_playwright().start()
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(viewport={"width": 1280, "height": 800})
-            page = context.new_page()
-            st.session_state.p = p
-            st.session_state.browser = browser
-            st.session_state.page = page
-        except Exception as e:
-            print(f"Browser init error: {e}")
-    return st.session_state.get("page")
-
-page = get_browser()
+# Bulletproof safe session manager (Auto-recreates browser if connection closes)
+def get_safe_page():
+    try:
+        if "browser" in st.session_state and "page" in st.session_state:
+            # Test if connection is still alive
+            _ = st.session_state.page.url
+            return st.session_state.page
+    except Exception:
+        pass
+    
+    # Re-initialize cleanly if closed or dead
+    try:
+        if "p" in st.session_state:
+            try: st.session_state.p.stop()
+            except: pass
+        
+        p = sync_playwright().start()
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(viewport={"width": 1280, "height": 800})
+        page = context.new_page()
+        
+        st.session_state.p = p
+        st.session_state.browser = browser
+        st.session_state.page = page
+        return page
+    except Exception as e:
+        st.error(f"Browser init error: {e}")
+        return None
 
 task_command = st.text_input("Enter command for NotRa (e.g., 'open youtube and play first video', 'scroll down'):")
 
@@ -43,8 +54,9 @@ if st.button("Execute Task"):
         status_box.info(f"🚀 NotRa is executing: '{task_command}'...")
         
         try:
+            page = get_safe_page()
             if not page:
-                st.error("Browser session failed. Please refresh.")
+                st.error("Failed to connect browser session. Please try again.")
                 st.stop()
 
             cmd = task_command.lower()
@@ -89,12 +101,13 @@ if st.button("Execute Task"):
         except Exception as e:
             status_box.error(f"Execution Error: {e}")
 
-# Live Stream Window Display
+# Live Stream Window Display with Manual Refresh Button
 st.subheader("📺 Live Browser Window Stream")
 if st.button("🔄 Refresh Live View"):
     st.rerun()
 
 try:
+    page = get_safe_page()
     if page:
         current_url = page.url
         screenshot_bytes = page.screenshot(type="png", full_page=False)
@@ -102,4 +115,5 @@ try:
     else:
         st.info("Run a task to initialize the live browser window.")
 except Exception as e:
-    st.info("Browser session restarting. Please click 'Execute Task' or 'Refresh Live View'.")
+    st.info("Click 'Execute Task' or 'Refresh Live View' to load browser stream.")
+    
