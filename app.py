@@ -16,17 +16,20 @@ st.set_page_config(page_title="NotRa Live Project Agent", page_icon="🤖", layo
 st.title("🤖 NotRa Live Project Agent")
 st.caption("🟢 Persistent Session + Live Stream + Zero-Disk Memory")
 
-# Persistent browser session manager
+# Robust browser session manager to prevent connection close
 def get_browser():
-    if "browser_session" not in st.session_state:
-        p = sync_playwright().start()
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": 1280, "height": 800})
-        page = context.new_page()
-        st.session_state.p = p
-        st.session_state.browser = browser
-        st.session_state.page = page
-    return st.session_state.page
+    if "p" not in st.session_state or "browser" not in st.session_state or "page" not in st.session_state:
+        try:
+            p = sync_playwright().start()
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+            st.session_state.p = p
+            st.session_state.browser = browser
+            st.session_state.page = page
+        except Exception as e:
+            print(f"Browser init error: {e}")
+    return st.session_state.get("page")
 
 page = get_browser()
 
@@ -40,6 +43,10 @@ if st.button("Execute Task"):
         status_box.info(f"🚀 NotRa is executing: '{task_command}'...")
         
         try:
+            if not page:
+                st.error("Browser session failed. Please refresh.")
+                st.stop()
+
             cmd = task_command.lower()
 
             if "http" in cmd or ".gd" in cmd or ".com" in cmd or ".net" in cmd:
@@ -82,13 +89,17 @@ if st.button("Execute Task"):
         except Exception as e:
             status_box.error(f"Execution Error: {e}")
 
-# Live Stream Window Display (Using use_container_width instead of use_column_width)
+# Live Stream Window Display
 st.subheader("📺 Live Browser Window Stream")
 if st.button("🔄 Refresh Live View"):
     st.rerun()
 
 try:
-    current_url = page.url
-    screenshot_bytes = page.screenshot(type="png", full_page=False)
-    st.image(screenshot_bytes, caption=f"Current Live View | URL: {
-        
+    if page:
+        current_url = page.url
+        screenshot_bytes = page.screenshot(type="png", full_page=False)
+        st.image(screenshot_bytes, caption=f"Current Live View | URL: {current_url}", use_container_width=True)
+    else:
+        st.info("Run a task to initialize the live browser window.")
+except Exception as e:
+    st.info("Browser session restarting. Please click 'Execute Task' or 'Refresh Live View'.")
