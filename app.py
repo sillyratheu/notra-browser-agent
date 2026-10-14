@@ -11,82 +11,111 @@ if "browser_installed" not in st.session_state:
         pass
     st.session_state.browser_installed = True
 
-st.set_page_config(page_title="NotRa Autonomous Agent", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="NotRa Live Project Agent", page_icon="🤖", layout="wide")
 
-st.title("🤖 NotRa Autonomous Browser Agent")
-st.caption("🟢 Live 3-sec SS stream, Captcha/Login pause handler & Smart execution")
+st.title("🤖 NotRa Live Project Agent")
+st.caption("🟢 Smart understanding + Persistent session + Live refreshing window stream")
 
-if "action_history" not in st.session_state:
-    st.session_state.action_history = []
+# Initialize persistent browser session in Streamlit session_state
+if "playwright_active" not in st.session_state:
+    p = sync_playwright().start()
+    browser = p.chromium.launch(headless=True)
+    context = browser.new_context(viewport={"width": 1280, "height": 800})
+    page = context.new_page()
+    
+    st.session_state.p = p
+    st.session_state.browser = browser
+    st.session_state.context = context
+    st.session_state.page = page
+    st.session_state.playwright_active = True
 
-task_command = st.text_input("Enter ANY task for NotRa (e.g., 'go to github and create repo', 'search lofi on youtube'):")
+page = st.session_state.page
 
-if st.button("Run NotRa Agent"):
+# Sidebar controls for project session
+with st.sidebar:
+    st.header("📂 Project Session Hub")
+    st.markdown("Session active thakbe. Poroborti command age-er state thekei kaj korbe.")
+    if st.button("🔄 Reset Project Session"):
+        try:
+            st.session_state.browser.close()
+            st.session_state.p.stop()
+        except:
+            pass
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.success("Session reset done! Please refresh page.")
+        st.rerun()
+
+# Main Command Box
+task_command = st.text_input("Enter command for NotRa (e.g., 'open youtube and play first video', 'scroll down'):")
+
+if st.button("Execute Task"):
     if not task_command:
         st.warning("Please enter a command first!")
     else:
-        st.session_state.action_history = []
         status_box = st.empty()
         
+        # Phase 1: Understanding command first
+        status_box.info("🧠 NotRa is understanding your command...")
+        time.sleep(1) # Simulation of thinking/understanding phase
+        
         try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                context = browser.new_context(viewport={"width": 1280, "height": 800})
-                page = context.new_page()
+            cmd = task_command.lower()
+            status_box.info(f"🚀 NotRa is executing: '{task_command}'...")
 
-                cmd = task_command.lower()
-
-                # 1. Navigation / Task starting
-                status_box.info("NotRa is initiating navigation...")
-                if "http" in cmd or ".gd" in cmd or ".com" in cmd or ".net" in cmd or ".org" in cmd:
-                    words = task_command.split()
-                    url = next((w for w in words if w.startswith("http") or "." in w), "https://google.com")
+            # Navigation / Action logic based on persistent state
+            if "http" in cmd or ".gd" in cmd or ".com" in cmd or ".net" in cmd:
+                words = task_command.split()
+                url = next((w for w in words if w.startswith("http") or "." in w), "")
+                if url:
                     if not url.startswith("http"): url = "https://" + url
                     page.goto(url)
-                elif "youtube" in cmd or "yt" in cmd or "play" in cmd:
+                    page.wait_for_timeout(3000)
+
+            elif "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
+                if "youtube.com" not in page.url:
                     page.goto("https://www.youtube.com")
                     page.wait_for_timeout(2000)
-                    q = cmd.replace("go to", "").replace("search", "").replace("on youtube", "").replace("youtube", "").replace("yt", "").replace("play", "").strip()
-                    if not q: q = "trending"
+                
+                q = cmd.replace("go to", "").replace("search", "").replace("on youtube", "").replace("youtube", "").replace("yt", "").replace("play", "").replace("video", "").strip()
+                if q and len(q) > 2:
                     try:
                         page.fill('input[name="search_query"]', q)
                     except:
                         page.keyboard.type(q)
                     page.keyboard.press('Enter')
-                else:
-                    page.goto(f"https://www.google.com/search?q={requests.utils.quote(task_command)}")
+                    page.wait_for_timeout(3000)
+                
+                # Automatically click the first video if requested
+                try:
+                    page.locator('ytd-video-renderer #video-title').first.click()
+                    page.wait_for_timeout(3000)
+                except:
+                    pass
 
-                # 2. 3-Second Interval Live SS Loop & Captcha/Login Detection
-                for i in range(5):  # Monitor progress steps
-                    page.wait_for_timeout(3000)  # Wait 3 seconds
-                    current_url = page.url
-                    page_text = page.inner_text("body").lower()
+            elif "scroll" in cmd:
+                page.mouse.wheel(0, 800)
+                page.wait_for_timeout(2000)
+            else:
+                page.keyboard.type(task_command)
+                page.wait_for_timeout(2000)
 
-                    # Check for Captcha or Login blocks
-                    if "captcha" in page_text or "robot" in page_text or "verify" in page_text:
-                        status_box.error("⚠️ NotRa hit a CAPTCHA wall! Please take over control.")
-                        break
-                    elif "login" in current_url or "signin" in current_url:
-                        status_box.warning(f"🔑 Login required at: {current_url}. Please complete sign-in.")
-                        break
+            # Phase 2: Live Refreshing Window Stream (Single slot updating every 3 seconds)
+            st.subheader("📺 Live Browser Window Stream")
+            image_placeholder = st.empty() # Dynamic slot that updates every 3 seconds
 
-                    # Take live screenshot every 3 seconds
-                    ss_path = f"live_ss_{i}.png"
-                    page.screenshot(path=ss_path, full_page=False)
-                    st.session_state.action_history.append((f"Live Action Step {i+1} (URL: {current_url})", ss_path))
-                    status_box.info(f"NotRa is working... Step {i+1} captured.")
+            for i in range(5):
+                page.wait_for_timeout(3000) # Wait 3 seconds
+                current_url = page.url
+                ss_path = f"live_frame_{time.time()}.png"
+                page.screenshot(path=ss_path, full_page=False)
+                
+                # Replace the image in real-time like a live stream frame
+                image_placeholder.image(ss_path, caption=f"Live View - Step {i+1}/5 | URL: {current_url}", use_column_width=True)
+                status_box.info(f"NotRa is working... Live frame updated ({i+1}/5)")
 
-                browser.close()
-                st.success("Task done Boss! 🎉 NotRa has successfully executed your command.")
+            status_box.success("Task done Boss! 🎉 NotRa has successfully executed your command.")
 
         except Exception as e:
-            st.error(f"NotRa Agent Error: {e}")
-
-# Display Live 3-Sec Window Stream History
-if st.session_state.action_history:
-    st.subheader("📺 NotRa Live Window Stream (Every 3 Seconds)")
-    for desc, img_p in st.session_state.action_history:
-        st.markdown(f"**{desc}**")
-        if os.path.exists(img_p):
-            st.image(img_p, caption=desc, use_column_width=True)
-        
+            status_box.error(f"Execution Error: {e}")
+    
