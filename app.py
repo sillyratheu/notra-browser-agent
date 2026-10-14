@@ -184,4 +184,4 @@ if st.session_state.action_history:
         st.image(img_p, caption=desc, use_container_width=True)
 else:
     st.info("Execute a task above to see the live browser view.")
-                                                 
+        
