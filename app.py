@@ -26,7 +26,7 @@ with st.sidebar:
     input_pass = st.text_input("Password", type="password")
 
 # Main Command Box
-task_command = st.text_input("Enter clean command (e.g., 'play lofi on youtube', 'open github', 'search python'):")
+task_command = st.text_input("Enter clean command (e.g., 'play lofi on youtube', 'open topsurvey.app', 'search python'):")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -50,7 +50,7 @@ if st.button("Run Browser Agent"):
                             "--disable-setuid-sandbox"
                         ]
                     )
-                    
+
                     context = browser.new_context(
                         viewport={"width": 1280, "height": 800},
                         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
@@ -59,19 +59,21 @@ if st.button("Run Browser Agent"):
 
                     cmd = task_command.lower().strip()
 
-                    # Smart Core Intent Extraction (No unwanted sentence typing!)
-                    if "http" in cmd or ".gd" in cmd or ".com" in cmd or ".net" in cmd or ".org" in cmd:
+                    # Smart Direct URL Navigation (Fixes Google search override issue)
+                    if "http" in cmd or ".app" in cmd or ".com" in cmd or ".net" in cmd or ".org" in cmd or ".io" in cmd or ".gd" in cmd:
                         words = task_command.split()
-                        url = next((w for w in words if w.startswith("http") or "." in w), "https://google.com")
-                        if not url.startswith("http"): url = "https://" + url
-                        page.goto(url)
-                        page.wait_for_timeout(2000)
-                        
+                        url = next((w for w in words if "http" in w or "." in w), "https://google.com")
+                        if not url.startswith("http"):
+                            url = "https://" + url
+                        # Remove trailing punctuation if any attached
+                        url = url.rstrip(".,!?;'")
+                        page.goto(url, timeout=60000)
+                        page.wait_for_timeout(3000)
+
                     elif "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
                         page.goto("https://www.youtube.com")
-                        page.wait_for_timeout(1500)
-                        
-                        # Extract ONLY the core topic (removing filler words like 'open', 'youtube', 'search', 'play', 'the first')
+                        page.wait_for_timeout(2000)
+
                         q = (cmd.replace("open youtube", "")
                                 .replace("search on youtube", "")
                                 .replace("youtube", "")
@@ -84,25 +86,30 @@ if st.button("Run Browser Agent"):
                                 .replace("first", "")
                                 .replace("on", "")
                                 .strip())
-                        
+
                         if not q: q = "lofi music"
-                        
+
                         try:
                             page.fill('input[name="search_query"]', q)
                             page.keyboard.press('Enter')
-                            page.wait_for_timeout(3000)
+                            page.wait_for_timeout(4000)
                         except:
                             pass
-                        
-                        # Instantly click and play the first video if requested
+
+                        # Fix for YouTube video unavailable / direct play
                         if "play" in cmd or "video" in cmd:
                             try:
-                                page.locator('ytd-video-renderer #video-title').first.click()
-                                page.wait_for_timeout(3000)
+                                # Wait for video elements to load and click the first valid video link
+                                page.locator('ytd-video-renderer a#video-title').first.click()
+                                page.wait_for_timeout(4000)
                             except:
-                                pass
+                                try:
+                                    page.locator('#contents ytd-video-renderer').first.click()
+                                    page.wait_for_timeout(4000)
+                                except:
+                                    pass
                     else:
-                        # Clean search query extraction for Google
+                        # Clean search query extraction for Google if it's a general search
                         clean_q = (cmd.replace("search on google", "")
                                       .replace("google", "")
                                       .replace("search", "")
@@ -110,11 +117,11 @@ if st.button("Run Browser Agent"):
                                       .replace("find", "")
                                       .strip())
                         if not clean_q: clean_q = task_command
-                        
+
                         google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
                         page.goto(google_url)
                         page.wait_for_timeout(2000)
-                        
+
                         if "open website" in cmd or "go to site" in cmd:
                             try:
                                 page.locator('h3').first.click()
@@ -142,24 +149,26 @@ if st.button("Run Browser Agent"):
                         except:
                             pass
 
-                    # Intelligent Check for Login, Sign up, or Captcha
+                    # Intelligent Check for Login, Sign up, or Captcha & Auto Fill
                     current_url = page.url
                     page_body_text = page.inner_text("body").lower()
-                    
-                    is_auth_required = "login" in current_url.lower() or "signin" in current_url.lower() or "signup" in current_url.lower()
-                    is_captcha_required = "captcha" in page_body_text or "robot" in page_body_text or "verify you are human" in page_body_text
 
-                    if is_auth_required or is_captcha_required:
-                        st.error(f"⚠️ **Attention Ramim!** NotRa encountered a Login/Sign-up or Captcha block at this link: [{current_url}]({current_url}). Please sign up / login or solve captcha!")
-                    else:
-                        if input_user and input_pass and ("login" in current_url.lower() or "signin" in current_url.lower()):
-                            try:
-                                page.fill('input[type="email"], input[name*="user"], input[name*="login"]', input_user)
-                                page.fill('input[name*="password"], input[type="password"]', input_pass)
-                                page.keyboard.press('Enter')
-                                page.wait_for_timeout(3000)
-                            except:
-                                pass
+                    is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register", "create account"])
+                    is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human", "challenge"])
+
+                    # Try auto-filling credentials if available and on login/signup page
+                    if input_user and input_pass:
+                        try:
+                            page.fill('input[type="email"], input[name*="user"], input[name*="login"], input[placeholder*="email" i]', input_user)
+                            page.fill('input[name*="password"], input[type="password"], input[placeholder*="password" i]', input_pass)
+                            page.wait_for_timeout(1000)
+                        except:
+                            pass
+
+                    if is_captcha_required:
+                        st.error(f"⚠️ **Attention Ramim!** NotRa encountered a Captcha block at: [{current_url}]({current_url}). Please solve it manually!")
+                    elif is_auth_required and not input_user:
+                        st.warning(f"⚠️ **Auth/Sign-up detected:** Please provide Username/Email & Password in the sidebar so NotRa can fill it automatically.")
 
                     # Capture Live View Screenshot
                     img1 = "step1.png"
@@ -184,4 +193,3 @@ if st.session_state.action_history:
         st.image(img_p, caption=desc, use_container_width=True)
 else:
     st.info("Execute a task above to see the live browser view.")
-        
