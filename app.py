@@ -1,11 +1,13 @@
 import os
 import re
 import requests
+import asyncio
+import streamlit as st
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from playwright.sync_api import sync_playwright
 
-# New Bot Token provided by Ramim
+# Bot Token provided by Ramim
 BOT_TOKEN = "8718050320:AAEMSjaDMAZttACJwEXgMM-bXBtvkhdVEkc"
 
 # Ensure playwright chromium is installed
@@ -16,6 +18,13 @@ if not os.path.exists("/tmp/playwright_installed"):
             f.write("installed")
     except:
         pass
+
+# Streamlit Page Config
+st.set_page_config(page_title="NotRa Telegram Agent", page_icon="🤖")
+
+st.title("🤖 NotRa Telegram Browser Agent Server")
+st.success("🟢 Bot is actively running on Telegram! You can close this tab or keep it open.")
+st.markdown("👉 **Click here to talk to your bot:** [@Notra_aibot](https://t.me/Notra_aibot)")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -31,7 +40,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_msg = (
         "🤖 **Welcome to NotRa Telegram Browser Agent!**\n"
         "🟢 Built and Owned exclusively by Ramim\n\n"
-        "Niche command select karo ba direct likhe pathao! Ar upore **'Open NotRa Bot'** button-e click kore sohoje redirect korte parbe[span_1](start_span)[span_1](end_span)."
+        "Niche command select karo ba direct likhe pathao!\n"
+        "Example: `open github.com` ba `play lofi on youtube`"
     )
     await update.message.reply_text(welcome_msg, parse_mode="Markdown", reply_markup=reply_markup)
 
@@ -179,15 +189,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await status_msg.edit_text(f"❌ Execution Error: {str(e)}")
 
-def main():
+# Background runner for Streamlit without Signal Handler crash
+@st.cache_resource
+def run_telegram_bot():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
-    print("🤖 Telegram Bot is running...")
-    app.run_polling()
+    # Crucial Fix: stop_signals=None avoids signal_handler Thread Exception in Streamlit Cloud
+    app.run_polling(stop_signals=None)
 
-if __name__ == "__main__":
-    main()
+# Start Bot in Streamlit Instance
+run_telegram_bot()
