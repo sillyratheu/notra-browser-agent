@@ -19,12 +19,18 @@ st.caption("🟢 Built and Owned exclusively by Ramim • Advanced Smart Intent 
 if "action_history" not in st.session_state:
     st.session_state.action_history = []
 
-# Sidebar for Login Credentials Helper
+# Sidebar for Login & Google Auth Helper
 with st.sidebar:
     st.header("🔑 Login & Auth Helper")
     st.markdown("Kono site-e login ba sign-up lagbe, ekhane info diye dile agent automatic fill-up korbe.")
     input_user = st.text_input("Username / Email")
     input_pass = st.text_input("Password", type="password")
+    
+    st.markdown("---")
+    st.header("🌐 Google Account Helper")
+    st.markdown("Jodi kono site-e 'Sign in with Google' ba Gmail diye login korte hoy:")
+    google_email = st.text_input("Google Email (Gmail)")
+    google_pass = st.text_input("Google Password", type="password")
 
 # Generic Command Helper Menu
 st.markdown("### ⚡ Command Helper Menu")
@@ -191,7 +197,7 @@ if st.button("Run Browser Agent"):
                         except:
                             pass
 
-                    # Auth detection & auto fill
+                    # Google Login / Sign-in Helper Integration
                     current_url = page.url
                     try:
                         page_body_text = page.inner_text("body").lower()
@@ -199,9 +205,27 @@ if st.button("Run Browser Agent"):
                         page_body_text = ""
 
                     is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register", "create account"])
+                    is_google_login = any(k in page_body_text for k in ["continue with google", "sign in with google", "google login", "login with google"])
                     is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human", "challenge"])
 
-                    if input_user and input_pass and is_auth_required:
+                    # If Google sign-in button is present and user provided Google credentials
+                    if is_google_login and google_email:
+                        try:
+                            page.get_by_text("google", exact=False).first.click()
+                            page.wait_for_timeout(3000)
+                            # Handle Google popup or redirection input if field available
+                            page.fill('input[type="email"]', google_email)
+                            page.keyboard.press('Enter')
+                            page.wait_for_timeout(2000)
+                            if google_pass:
+                                page.fill('input[type="password"]', google_pass)
+                                page.keyboard.press('Enter')
+                                page.wait_for_timeout(3000)
+                        except:
+                            pass
+
+                    # Standard auto-fill if normal signup/login form exists
+                    elif input_user and input_pass and is_auth_required:
                         try:
                             page.fill('input[type="email"], input[name*="user"], input[name*="login"], input[placeholder*="email" i]', input_user)
                             page.fill('input[name*="password"], input[type="password"], input[placeholder*="password" i]', input_pass)
@@ -211,8 +235,8 @@ if st.button("Run Browser Agent"):
 
                     if is_captcha_required:
                         st.error(f"⚠️ **Attention Ramim!** Captcha block encountered at: [{current_url}]({current_url}).")
-                    elif is_auth_required and not input_user:
-                        st.warning(f"⚠️ **Auth/Sign-up page detected:** Provide credentials in sidebar.")
+                    elif is_auth_required and not input_user and not google_email:
+                        st.warning(f"⚠️ **Auth/Sign-up page detected:** Provide Username/Password or Google credentials in the sidebar.")
 
                     # Screenshot
                     img1 = "step1.png"
