@@ -14,7 +14,7 @@ if "browser_installed" not in st.session_state:
 st.set_page_config(page_title="NotRa Browser Agent", page_icon="🤖", layout="wide")
 
 st.title("🤖 NotRa Autonomous Browser Agent")
-st.caption("🟢 Built and Owned exclusively by Ramim • Smart Intent Execution Engine")
+st.caption("🟢 Built and Owned exclusively by Ramim • Advanced Smart Intent Engine")
 
 if "action_history" not in st.session_state:
     st.session_state.action_history = []
@@ -27,7 +27,7 @@ with st.sidebar:
     input_pass = st.text_input("Password", type="password")
 
 # Main Command Box
-task_command = st.text_input("Enter clean command (e.g., 'play lofi on youtube', 'open ramims.work.gd', 'search python'):")
+task_command = st.text_input("Enter your command (e.g., 'play lofi on youtube', 'open github.com', 'search top survey site'):")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -40,7 +40,7 @@ if st.button("Run Browser Agent"):
         st.warning("Please enter a command first!")
     else:
         st.session_state.action_history = []
-        with st.spinner("NotRa is executing instantly..."):
+        with st.spinner("NotRa is executing your command intelligently..."):
             try:
                 with sync_playwright() as p:
                     browser = p.chromium.launch(
@@ -60,9 +60,8 @@ if st.button("Run Browser Agent"):
 
                     cmd = task_command.lower().strip()
 
-                    # Extract URL using regex
+                    # Smart URL / Domain Detection via Regex
                     url_match = re.search(r'(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', task_command)
-                    
                     target_url = None
                     if url_match:
                         matched_str = url_match.group(0).rstrip(".,!?;'")
@@ -71,8 +70,8 @@ if st.button("Run Browser Agent"):
                         else:
                             target_url = matched_str
 
-                    # Check Intent
-                    if "youtube" in cmd or "yt" in cmd or "play" in cmd:
+                    # Intent Execution Engine
+                    if "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
                         page.goto("https://www.youtube.com", wait_until="domcontentloaded", timeout=30000)
                         page.wait_for_timeout(2000)
 
@@ -98,17 +97,14 @@ if st.button("Run Browser Agent"):
                         except:
                             pass
 
-                        # Fix for YouTube video unavailable / safe video selection
+                        # Robust Video Playback (Avoids unavailable/dead links)
                         if "play" in cmd or "video" in cmd:
                             try:
-                                # Find video links and avoid mixes/shorts if possible, clicking a reliable result index
                                 videos = page.locator('ytd-video-renderer a#video-title')
                                 count = videos.count()
                                 clicked = False
-                                for i in range(min(count, 3)):
+                                for i in range(min(count, 4)):
                                     try:
-                                        vid_text = videos.nth(i).inner_text().lower()
-                                        # Skip shorts or live if wanted, or just try clicking
                                         videos.nth(i).click()
                                         page.wait_for_timeout(4000)
                                         clicked = True
@@ -122,14 +118,17 @@ if st.button("Run Browser Agent"):
                                 pass
 
                     elif target_url and not ("search" in cmd and "google" in cmd):
-                        # Strict direct visit without unwanted Google search fallback crash
+                        # Direct Website Navigation
                         try:
                             page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
                             page.wait_for_timeout(2500)
                         except Exception as e:
-                            st.warning(f"⚠️ Could not load direct URL `{target_url}`. Connection might be closed or domain unavailable.")
+                            st.error(f"⚠️ Could not load `{target_url}`. The domain might be down, invalid, or blocking automation.")
+                            browser.close()
+                            st.stop()
 
                     else:
+                        # General Smart Google Search for other queries
                         clean_q = (cmd.replace("search on google", "")
                                       .replace("google", "")
                                       .replace("search", "")
@@ -141,6 +140,14 @@ if st.button("Run Browser Agent"):
                         google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
                         page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
                         page.wait_for_timeout(2000)
+
+                        # If user asked to open website from search result
+                        if "open website" in cmd or "go to site" in cmd or "make an account" in cmd:
+                            try:
+                                page.locator('h3').first.click()
+                                page.wait_for_timeout(3000)
+                            except:
+                                pass
 
                     # Handle Extra Actions
                     if user_action == "Scroll Down" or "scroll down" in cmd:
@@ -162,30 +169,30 @@ if st.button("Run Browser Agent"):
                         except:
                             pass
 
-                    # Auth & Captcha Check
+                    # Intelligent Auth, Signup & Captcha Auto-Fill Helper
                     current_url = page.url
                     try:
                         page_body_text = page.inner_text("body").lower()
                     except:
                         page_body_text = ""
 
-                    is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register"])
-                    is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human"])
+                    is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register", "create account"])
+                    is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human", "challenge"])
 
                     if input_user and input_pass and is_auth_required:
                         try:
-                            page.fill('input[type="email"], input[name*="user"], input[name*="login"]', input_user)
-                            page.fill('input[name*="password"], input[type="password"]', input_pass)
+                            page.fill('input[type="email"], input[name*="user"], input[name*="login"], input[placeholder*="email" i]', input_user)
+                            page.fill('input[name*="password"], input[type="password"], input[placeholder*="password" i]', input_pass)
                             page.wait_for_timeout(1000)
                         except:
                             pass
 
                     if is_captcha_required:
-                        st.error(f"⚠️ **Attention Ramim!** NotRa encountered a Captcha block at: [{current_url}]({current_url}).")
+                        st.error(f"⚠️ **Attention Ramim!** NotRa encountered a Captcha/Robot block at: [{current_url}]({current_url}). Please solve it manually.")
                     elif is_auth_required and not input_user:
-                        st.warning(f"⚠️ **Auth/Sign-up detected:** Provide Username & Password in the sidebar so NotRa can fill it.")
+                        st.warning(f"⚠️ **Auth/Sign-up page detected:** Please input your Username/Email & Password in the sidebar so NotRa can fill it automatically.")
 
-                    # Screenshot
+                    # Capture Live View Screenshot
                     img1 = "step1.png"
                     page.screenshot(path=img1, full_page=False)
                     st.session_state.action_history.append((f"Task executed successfully (URL: {current_url})", img1))
@@ -196,7 +203,7 @@ if st.button("Run Browser Agent"):
             except Exception as e:
                 st.error(f"Agent Execution Error: {e}")
 
-# Live Stream Display
+# Live Stream Window Display
 st.subheader("🖥️ Live Browser Action Stream")
 if st.button("🔄 Refresh Live View"):
     st.rerun()
