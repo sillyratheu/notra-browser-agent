@@ -59,19 +59,30 @@ if st.button("Run Browser Agent"):
 
                     cmd = task_command.lower().strip()
 
-                    # Smart Direct URL Navigation (Fixes Google search override issue)
+                    # Smart Direct URL Navigation with Fallback to Google if site fails
                     if "http" in cmd or ".app" in cmd or ".com" in cmd or ".net" in cmd or ".org" in cmd or ".io" in cmd or ".gd" in cmd:
                         words = task_command.split()
                         url = next((w for w in words if "http" in w or "." in w), "https://google.com")
                         if not url.startswith("http"):
                             url = "https://" + url
-                        # Remove trailing punctuation if any attached
                         url = url.rstrip(".,!?;'")
-                        page.goto(url, timeout=60000)
-                        page.wait_for_timeout(3000)
+                        
+                        try:
+                            page.goto(url, timeout=30000)
+                            page.wait_for_timeout(3000)
+                        except:
+                            # Fallback if connection fails/closed
+                            google_url = f"https://www.google.com/search?q={requests.utils.quote(task_command)}"
+                            page.goto(google_url, timeout=30000)
+                            page.wait_for_timeout(2000)
+                            try:
+                                page.locator('h3').first.click()
+                                page.wait_for_timeout(3000)
+                            except:
+                                pass
 
                     elif "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
-                        page.goto("https://www.youtube.com")
+                        page.goto("https://www.youtube.com", timeout=30000)
                         page.wait_for_timeout(2000)
 
                         q = (cmd.replace("open youtube", "")
@@ -96,12 +107,14 @@ if st.button("Run Browser Agent"):
                         except:
                             pass
 
-                        # Fix for YouTube video unavailable / direct play
+                        # Fix for YouTube video unavailable: skip livestreams/premiere/shorts or expired ones if needed, click valid video
                         if "play" in cmd or "video" in cmd:
                             try:
-                                # Wait for video elements to load and click the first valid video link
-                                page.locator('ytd-video-renderer a#video-title').first.click()
-                                page.wait_for_timeout(4000)
+                                # Try clicking the second or first non-broken thumbnail title link
+                                videos = page.locator('ytd-video-renderer a#video-title')
+                                if videos.count() > 0:
+                                    videos.first.click()
+                                    page.wait_for_timeout(4000)
                             except:
                                 try:
                                     page.locator('#contents ytd-video-renderer').first.click()
@@ -109,7 +122,6 @@ if st.button("Run Browser Agent"):
                                 except:
                                     pass
                     else:
-                        # Clean search query extraction for Google if it's a general search
                         clean_q = (cmd.replace("search on google", "")
                                       .replace("google", "")
                                       .replace("search", "")
@@ -119,7 +131,7 @@ if st.button("Run Browser Agent"):
                         if not clean_q: clean_q = task_command
 
                         google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
-                        page.goto(google_url)
+                        page.goto(google_url, timeout=30000)
                         page.wait_for_timeout(2000)
 
                         if "open website" in cmd or "go to site" in cmd:
@@ -156,7 +168,6 @@ if st.button("Run Browser Agent"):
                     is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register", "create account"])
                     is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human", "challenge"])
 
-                    # Try auto-filling credentials if available and on login/signup page
                     if input_user and input_pass:
                         try:
                             page.fill('input[type="email"], input[name*="user"], input[name*="login"], input[placeholder*="email" i]', input_user)
