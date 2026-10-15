@@ -27,23 +27,43 @@ st.success("🟢 Bot is actively running on Telegram! You can close this tab or 
 st.markdown("👉 **Click here to talk to your bot:** [@Notra_aibot](https://t.me/Notra_aibot)")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "history" not in context.user_data:
+        context.user_data["history"] = []
+    
     keyboard = [
         [InlineKeyboardButton("🤖 Open NotRa Bot", url="https://t.me/Notra_aibot")],
         [InlineKeyboardButton("🔍 Google Search", callback_data="cmd_search"),
          InlineKeyboardButton("🌐 Open Website", callback_data="cmd_open")],
         [InlineKeyboardButton("🎵 YouTube Search", callback_data="cmd_yt_search"),
          InlineKeyboardButton("▶️ Play YT Video", callback_data="cmd_yt_play")],
-        [InlineKeyboardButton("🚀 Do Task / Signup", callback_data="cmd_task")]
+        [InlineKeyboardButton("🖱️ Scroll & Touch", callback_data="cmd_scroll"),
+         InlineKeyboardButton("🧠 View Memory", callback_data="cmd_memory")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_msg = (
         "🤖 **Welcome to NotRa Telegram Browser Agent!**\n"
         "🟢 Built and Owned exclusively by Ramim\n\n"
+        "🧠 **TG Memory Active:** Apnar shob ager task ebong history Telegram memory-te save thakbe!\n"
+        "📱 **Touch & Scroll:** Jekono page-e giye scroll ba touch/click korte parbe.\n\n"
         "Niche command select karo ba direct likhe pathao!\n"
-        "Example: `open github.com` ba `play lofi on youtube`"
+        "Example: `open github.com`, `scroll down`, ba `click sign in`"
     )
     await update.message.reply_text(welcome_msg, parse_mode="Markdown", reply_markup=reply_markup)
+
+async def view_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    history = context.user_data.get("history", [])
+    if not history:
+        msg = "🧠 **NotRa Memory:** Kono purono task memory te save ney."
+    else:
+        msg = "🧠 **NotRa User Memory (Last Tasks):**\n\n"
+        for idx, item in enumerate(history[-5:], 1):
+            msg += f"{idx}. Command: `{item['command']}`\n   URL: {item['url']}\n"
+    
+    if update.callback_query:
+        await update.callback_query.message.reply_text(msg, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -51,21 +71,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     data = query.data
     if data == "cmd_search":
-        await query.message.reply_text("💡 Type your search query like: `search python programming`")
+        await query.message.reply_text("💡 Type search query like: `search python programming`")
     elif data == "cmd_open":
         await query.message.reply_text("💡 Type website to open like: `open github.com`")
     elif data == "cmd_yt_search":
         await query.message.reply_text("💡 Type YouTube search like: `search on youtube lofi music`")
     elif data == "cmd_yt_play":
-        await query.message.reply_text("💡 Type YouTube play command like: `play lofi on youtube`")
-    elif data == "cmd_task":
-        await query.message.reply_text("💡 Type task command like: `open topsurvey.app and create account`")
+        await query.message.reply_text("💡 Type YouTube play like: `play lofi on youtube`")
+    elif data == "cmd_scroll":
+        await query.message.reply_text("💡 Type scroll or touch command like: `scroll down` or `click login`")
+    elif data == "cmd_memory":
+        await view_memory(update, context)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task_command = update.message.text.strip()
     chat_id = update.message.chat_id
     
-    status_msg = await update.message.reply_text("⏳ NotRa is executing your command intelligently...")
+    if "history" not in context.user_data:
+        context.user_data["history"] = []
+    
+    status_msg = await update.message.reply_text("⏳ NotRa is executing your command using TG Memory...")
 
     try:
         async with async_playwright() as p:
@@ -96,7 +121,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     target_url = matched_str
 
-            # Execution Engine (Async Playwright)
+            # If user wants to continue on current page or start fresh
             if "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
                 await page.goto("https://www.youtube.com", wait_until="domcontentloaded", timeout=30000)
                 await page.wait_for_timeout(2000)
@@ -130,14 +155,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         clicked = False
                         for i in range(min(count, 4)):
                             try:
-                                await videos.nth(i).click()
+                                await videos.nth(i).click(force=True)
                                 await page.wait_for_timeout(4000)
                                 clicked = True
                                 break
                             except:
                                 continue
                         if not clicked and count > 0:
-                            await videos.first.click()
+                            await videos.first.click(force=True)
                             await page.wait_for_timeout(4000)
                     except:
                         pass
@@ -152,26 +177,57 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
             else:
-                clean_q = (cmd.replace("search on google", "")
-                              .replace("google", "")
-                              .replace("search", "")
-                              .replace("open", "")
-                              .replace("find", "")
-                              .strip())
-                if not clean_q: clean_q = task_command
+                # Check if it's a direct scroll or touch/click command without new URL
+                if "scroll" in cmd or "click" in cmd:
+                    # If history has a previous URL, open it first
+                    history = context.user_data.get("history", [])
+                    last_url = history[-1]["url"] if history else "https://www.google.com"
+                    await page.goto(last_url, wait_until="domcontentloaded", timeout=25000)
+                    await page.wait_for_timeout(2000)
+                else:
+                    clean_q = (cmd.replace("search on google", "")
+                                  .replace("google", "")
+                                  .replace("search", "")
+                                  .replace("open", "")
+                                  .replace("find", "")
+                                  .strip())
+                    if not clean_q: clean_q = task_command
 
-                google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
-                await page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
-                await page.wait_for_timeout(2000)
+                    google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
+                    await page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
+                    await page.wait_for_timeout(2000)
 
-                if "open website" in cmd or "go to site" in cmd or "make an account" in cmd:
+                    if "open website" in cmd or "go to site" in cmd or "make an account" in cmd:
+                        try:
+                            await page.locator('h3').first.click(force=True)
+                            await page.wait_for_timeout(3000)
+                        except:
+                            pass
+
+            # --- Scroll & Touch Interaction Engine ---
+            if "scroll down" in cmd:
+                await page.mouse.wheel(0, 800)
+                await page.wait_for_timeout(1500)
+            elif "scroll up" in cmd:
+                await page.mouse.wheel(0, -800)
+                await page.wait_for_timeout(1500)
+
+            if "click" in cmd:
+                click_words = cmd.split("click")[-1].strip()
+                if click_words:
                     try:
-                        await page.locator('h3').first.click()
-                        await page.wait_for_timeout(3000)
+                        await page.get_by_text(click_words, exact=False).first.click(force=True, timeout=5000)
+                        await page.wait_for_timeout(2500)
                     except:
                         pass
 
             current_url = page.url
+            
+            # Save to Telegram User Memory
+            context.user_data["history"].append({
+                "command": task_command,
+                "url": current_url
+            })
             
             # Screenshot Capture & Send to Telegram
             img_path = f"telegram_shot_{chat_id}.png"
@@ -182,7 +238,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_photo(
                     chat_id=chat_id,
                     photo=photo,
-                    caption=f"✅ **Task Executed Successfully!**\n🌐 **URL:** {current_url}"
+                    caption=f"✅ **Task Executed Successfully!**\n🌐 **URL:** {current_url}\n🧠 Memory updated in TG Chat!"
                 )
             await status_msg.delete()
 
@@ -197,6 +253,7 @@ def run_telegram_bot():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("memory", view_memory))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
