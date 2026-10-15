@@ -26,8 +26,27 @@ with st.sidebar:
     input_user = st.text_input("Username / Email")
     input_pass = st.text_input("Password", type="password")
 
-# Main Command Box
-task_command = st.text_input("Enter your command (e.g., 'play lofi on youtube', 'open github.com', 'search top survey site'):")
+# --- Quick Preset Commands Section (Top Buttons) ---
+st.markdown("### ⚡ Quick Preset Commands")
+preset_col1, preset_col2, preset_col3, preset_col4 = st.columns(4)
+
+preset_cmd = ""
+with preset_col1:
+    if st.button("🎵 Play Lofi"):
+        preset_cmd = "play lofi music on youtube"
+with preset_col2:
+    if st.button("🌐 Open GitHub"):
+        preset_cmd = "open github.com"
+with preset_col3:
+    if st.button("🔍 Search Python"):
+        preset_cmd = "search python programming"
+with preset_col4:
+    if st.button("🛒 Open Amazon"):
+        preset_cmd = "open amazon.com"
+
+# Main Command Box (Prefilled if preset button is clicked)
+default_val = preset_cmd if preset_cmd else ""
+task_command = st.text_input("Enter your command (e.g., 'play lofi on youtube', 'open github.com', 'search python'):", value=default_val)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -60,7 +79,7 @@ if st.button("Run Browser Agent"):
 
                     cmd = task_command.lower().strip()
 
-                    # Smart URL / Domain Detection via Regex
+                    # Smart URL / Domain Detection via Regex for External Websites
                     url_match = re.search(r'(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', task_command)
                     target_url = None
                     if url_match:
@@ -118,7 +137,7 @@ if st.button("Run Browser Agent"):
                                 pass
 
                     elif target_url and not ("search" in cmd and "google" in cmd):
-                        # Direct Website Navigation
+                        # Direct External Website Navigation
                         try:
                             page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
                             page.wait_for_timeout(2500)
@@ -141,7 +160,6 @@ if st.button("Run Browser Agent"):
                         page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
                         page.wait_for_timeout(2000)
 
-                        # If user asked to open website from search result
                         if "open website" in cmd or "go to site" in cmd or "make an account" in cmd:
                             try:
                                 page.locator('h3').first.click()
