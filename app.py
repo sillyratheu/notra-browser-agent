@@ -26,27 +26,41 @@ with st.sidebar:
     input_user = st.text_input("Username / Email")
     input_pass = st.text_input("Password", type="password")
 
-# --- Quick Preset Commands Section (Top Buttons) ---
-st.markdown("### ⚡ Quick Preset Commands")
-preset_col1, preset_col2, preset_col3, preset_col4 = st.columns(4)
+# --- Single Preset Dropdown Menu Button ---
+st.markdown("### ⚡ Quick Command Helper Menu")
 
-preset_cmd = ""
-with preset_col1:
-    if st.button("🎵 Play Lofi"):
-        preset_cmd = "play lofi music on youtube"
-with preset_col2:
-    if st.button("🌐 Open GitHub"):
-        preset_cmd = "open github.com"
-with preset_col3:
-    if st.button("🔍 Search Python"):
-        preset_cmd = "search python programming"
-with preset_col4:
-    if st.button("🛒 Open Amazon"):
-        preset_cmd = "open amazon.com"
+preset_options = [
+    "-- Select a Command --",
+    "Search - Python Programming",
+    "Search - Latest Tech News",
+    "Open Website - github.com",
+    "Open Website - wikipedia.org",
+    "Open Website - amazon.com",
+    "YouTube - Play Lofi Music",
+    "YouTube - Search Trending Videos",
+    "Do Task - Create Account on Website",
+    "Do Task - Check Signup & Fill Form"
+]
 
-# Main Command Box (Prefilled if preset button is clicked)
-default_val = preset_cmd if preset_cmd else ""
-task_command = st.text_input("Enter your command (e.g., 'play lofi on youtube', 'open github.com', 'search python'):", value=default_val)
+selected_preset = st.selectbox("Choose a command from menu:", preset_options)
+
+# Map preset selections to actual command strings
+preset_mapping = {
+    "Search - Python Programming": "search python programming",
+    "Search - Latest Tech News": "search latest tech news",
+    "Open Website - github.com": "open github.com",
+    "Open Website - wikipedia.org": "open wikipedia.org",
+    "Open Website - amazon.com": "open amazon.com",
+    "YouTube - Play Lofi Music": "play lofi music on youtube",
+    "YouTube - Search Trending Videos": "search trending videos on youtube",
+    "Do Task - Create Account on Website": "open website and create an account",
+    "Do Task - Check Signup & Fill Form": "open login and sign up page"
+}
+
+default_cmd_value = preset_mapping.get(selected_preset, "") if selected_preset != "-- Select a Command --" else ""
+
+# Main Command Box
+task_command = st.text_input("Enter your command or select from menu above:", value=default_cmd_value)
 
 col1, col2 = st.columns(2)
 with col1:
@@ -147,7 +161,7 @@ if st.button("Run Browser Agent"):
                             st.stop()
 
                     else:
-                        # General Smart Google Search for other queries
+                        # General Smart Google Search or Do Task intents
                         clean_q = (cmd.replace("search on google", "")
                                       .replace("google", "")
                                       .replace("search", "")
@@ -160,7 +174,7 @@ if st.button("Run Browser Agent"):
                         page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
                         page.wait_for_timeout(2000)
 
-                        if "open website" in cmd or "go to site" in cmd or "make an account" in cmd:
+                        if "open website" in cmd or "go to site" in cmd or "make an account" in cmd or "create account" in cmd:
                             try:
                                 page.locator('h3').first.click()
                                 page.wait_for_timeout(3000)
