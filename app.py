@@ -2,6 +2,7 @@ import streamlit as st
 from playwright.sync_api import sync_playwright
 import os
 import requests
+import re
 
 if "browser_installed" not in st.session_state:
     try:
@@ -13,7 +14,7 @@ if "browser_installed" not in st.session_state:
 st.set_page_config(page_title="NotRa Browser Agent", page_icon="🤖", layout="wide")
 
 st.title("🤖 NotRa Autonomous Browser Agent")
-st.caption("🟢 Built and Owned exclusively by Ramim • Ultra-Fast Smart Intent Engine")
+st.caption("🟢 Built and Owned exclusively by Ramim • Smart Intent Execution Engine")
 
 if "action_history" not in st.session_state:
     st.session_state.action_history = []
@@ -26,7 +27,7 @@ with st.sidebar:
     input_pass = st.text_input("Password", type="password")
 
 # Main Command Box
-task_command = st.text_input("Enter clean command (e.g., 'play lofi on youtube', 'open topsurvey.app', 'search python'):")
+task_command = st.text_input("Enter clean command (e.g., 'play lofi on youtube', 'open ramims.work.gd', 'search python'):")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -59,30 +60,20 @@ if st.button("Run Browser Agent"):
 
                     cmd = task_command.lower().strip()
 
-                    # Smart Direct URL Navigation with Fallback to Google if site fails
-                    if "http" in cmd or ".app" in cmd or ".com" in cmd or ".net" in cmd or ".org" in cmd or ".io" in cmd or ".gd" in cmd:
-                        words = task_command.split()
-                        url = next((w for w in words if "http" in w or "." in w), "https://google.com")
-                        if not url.startswith("http"):
-                            url = "https://" + url
-                        url = url.rstrip(".,!?;'")
-                        
-                        try:
-                            page.goto(url, timeout=30000)
-                            page.wait_for_timeout(3000)
-                        except:
-                            # Fallback if connection fails/closed
-                            google_url = f"https://www.google.com/search?q={requests.utils.quote(task_command)}"
-                            page.goto(google_url, timeout=30000)
-                            page.wait_for_timeout(2000)
-                            try:
-                                page.locator('h3').first.click()
-                                page.wait_for_timeout(3000)
-                            except:
-                                pass
+                    # Extract URL using regex (detects domain like ramims.work.gd, site.com, etc.)
+                    url_match = re.search(r'(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', task_command)
+                    
+                    target_url = None
+                    if url_match:
+                        matched_str = url_match.group(0).rstrip(".,!?;'")
+                        if not matched_str.startswith("http"):
+                            target_url = "https://" + matched_str
+                        else:
+                            target_url = matched_str
 
-                    elif "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
-                        page.goto("https://www.youtube.com", timeout=30000)
+                    # Check Intent
+                    if "youtube" in cmd or "yt" in cmd or "play" in cmd:
+                        page.goto("https://www.youtube.com", wait_until="domcontentloaded", timeout=30000)
                         page.wait_for_timeout(2000)
 
                         q = (cmd.replace("open youtube", "")
@@ -103,24 +94,29 @@ if st.button("Run Browser Agent"):
                         try:
                             page.fill('input[name="search_query"]', q)
                             page.keyboard.press('Enter')
-                            page.wait_for_timeout(4000)
+                            page.wait_for_timeout(3000)
                         except:
                             pass
 
-                        # Fix for YouTube video unavailable: skip livestreams/premiere/shorts or expired ones if needed, click valid video
                         if "play" in cmd or "video" in cmd:
                             try:
-                                # Try clicking the second or first non-broken thumbnail title link
-                                videos = page.locator('ytd-video-renderer a#video-title')
-                                if videos.count() > 0:
-                                    videos.first.click()
-                                    page.wait_for_timeout(4000)
+                                page.locator('ytd-video-renderer a#video-title').first.click()
+                                page.wait_for_timeout(4000)
                             except:
-                                try:
-                                    page.locator('#contents ytd-video-renderer').first.click()
-                                    page.wait_for_timeout(4000)
-                                except:
-                                    pass
+                                pass
+
+                    elif target_url and not ("search" in cmd and "google" in cmd):
+                        # Direct domain visit with safe fallback
+                        try:
+                            page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
+                            page.wait_for_timeout(2000)
+                        except Exception as nav_err:
+                            # If direct domain fails, perform Google Search safely
+                            clean_q = task_command
+                            google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
+                            page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
+                            page.wait_for_timeout(2000)
+
                     else:
                         clean_q = (cmd.replace("search on google", "")
                                       .replace("google", "")
@@ -131,23 +127,16 @@ if st.button("Run Browser Agent"):
                         if not clean_q: clean_q = task_command
 
                         google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
-                        page.goto(google_url, timeout=30000)
+                        page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
                         page.wait_for_timeout(2000)
 
-                        if "open website" in cmd or "go to site" in cmd:
-                            try:
-                                page.locator('h3').first.click()
-                                page.wait_for_timeout(2500)
-                            except:
-                                pass
-
-                    # Handle Extra Actions Quickly
+                    # Handle Extra Actions
                     if user_action == "Scroll Down" or "scroll down" in cmd:
                         page.mouse.wheel(0, 800)
-                        page.wait_for_timeout(1500)
+                        page.wait_for_timeout(1000)
                     elif user_action == "Scroll Up":
                         page.mouse.wheel(0, -800)
-                        page.wait_for_timeout(1500)
+                        page.wait_for_timeout(1000)
                     elif user_action == "Click First Result":
                         try:
                             page.locator('h3, ytd-video-renderer #video-title').first.click()
@@ -161,27 +150,27 @@ if st.button("Run Browser Agent"):
                         except:
                             pass
 
-                    # Intelligent Check for Login, Sign up, or Captcha & Auto Fill
+                    # Auth & Captcha Check
                     current_url = page.url
                     page_body_text = page.inner_text("body").lower()
 
-                    is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register", "create account"])
-                    is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human", "challenge"])
+                    is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register"])
+                    is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human"])
 
                     if input_user and input_pass:
                         try:
-                            page.fill('input[type="email"], input[name*="user"], input[name*="login"], input[placeholder*="email" i]', input_user)
-                            page.fill('input[name*="password"], input[type="password"], input[placeholder*="password" i]', input_pass)
+                            page.fill('input[type="email"], input[name*="user"], input[name*="login"]', input_user)
+                            page.fill('input[name*="password"], input[type="password"]', input_pass)
                             page.wait_for_timeout(1000)
                         except:
                             pass
 
                     if is_captcha_required:
-                        st.error(f"⚠️ **Attention Ramim!** NotRa encountered a Captcha block at: [{current_url}]({current_url}). Please solve it manually!")
+                        st.error(f"⚠️ **Attention Ramim!** NotRa encountered a Captcha block at: [{current_url}]({current_url}).")
                     elif is_auth_required and not input_user:
-                        st.warning(f"⚠️ **Auth/Sign-up detected:** Please provide Username/Email & Password in the sidebar so NotRa can fill it automatically.")
+                        st.warning(f"⚠️ **Auth/Sign-up detected:** Provide Username & Password in the sidebar.")
 
-                    # Capture Live View Screenshot
+                    # Screenshot
                     img1 = "step1.png"
                     page.screenshot(path=img1, full_page=False)
                     st.session_state.action_history.append((f"Task executed successfully (URL: {current_url})", img1))
@@ -192,7 +181,7 @@ if st.button("Run Browser Agent"):
             except Exception as e:
                 st.error(f"Agent Execution Error: {e}")
 
-# Live Stream Window Display with Manual Refresh Button
+# Live Stream Display
 st.subheader("🖥️ Live Browser Action Stream")
 if st.button("🔄 Refresh Live View"):
     st.rerun()
