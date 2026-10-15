@@ -44,7 +44,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_msg = (
         "🤖 **Welcome to NotRa Telegram Browser Agent!**\n"
         "🟢 Built and Owned exclusively by Ramim\n\n"
-        "🧠 **TG Memory Active:** Apnar ager page ebong task memory-te mone rakhe!\n"
+        "🧠 **Notra is thinking 🤔:** Your past page task !\n"
         "NotRa is ready for your smart browser commands!"
     )
     await update.message.reply_text(welcome_msg, parse_mode="Markdown", reply_markup=reply_markup)
@@ -52,9 +52,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def view_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     history = context.user_data.get("history", [])
     if not history:
-        msg = "🧠 **NotRa Memory:** Kono purono task memory te save ney."
+        msg = "🧠 **NotRa says :** Nothimg here "
     else:
-        msg = "🧠 **NotRa User Memory (Last Tasks):**\n\n"
+        msg = "🧠 **NotRa says (Last Tasks):**\n\n"
         for idx, item in enumerate(history[-5:], 1):
             msg += f"{idx}. Command: `{item['command']}`\n   URL: {item['url']}\n"
     
