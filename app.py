@@ -36,32 +36,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
          InlineKeyboardButton("🌐 Open Website", callback_data="cmd_open")],
         [InlineKeyboardButton("🎵 YouTube Search", callback_data="cmd_yt_search"),
          InlineKeyboardButton("▶️ Play YT Video", callback_data="cmd_yt_play")],
-        [InlineKeyboardButton("🖱️ Scroll & Touch", callback_data="cmd_scroll"),
-         InlineKeyboardButton("🧠 View Memory", callback_data="cmd_memory")]
+        [InlineKeyboardButton("🖱️ Scroll & Touch", callback_data="cmd_scroll")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_msg = (
-        "🤖 **Welcome to NotRa Telegram Browser Agent!**\n"
+        "🤖 **Welcome to NotRa Autonomous Browser Agent!**\n"
         "🟢 Built and Owned exclusively by Ramim\n\n"
-        "🧠 **Notra is thinking 🤔:** Your past page task !\n"
-        "NotRa is ready for your smart browser commands!"
+        "Send any command, URL, or search prompt to start browsing!"
     )
     await update.message.reply_text(welcome_msg, parse_mode="Markdown", reply_markup=reply_markup)
-
-async def view_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    history = context.user_data.get("history", [])
-    if not history:
-        msg = "🧠 **NotRa says :** Nothimg here "
-    else:
-        msg = "🧠 **NotRa says (Last Tasks):**\n\n"
-        for idx, item in enumerate(history[-5:], 1):
-            msg += f"{idx}. Command: `{item['command']}`\n   URL: {item['url']}\n"
-    
-    if update.callback_query:
-        await update.callback_query.message.reply_text(msg, parse_mode="Markdown")
-    else:
-        await update.message.reply_text(msg, parse_mode="Markdown")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -78,8 +62,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("💡 Type YouTube play like: `play lofi on youtube`")
     elif data == "cmd_scroll":
         await query.message.reply_text("💡 Type scroll or touch command like: `scroll down` or `click login`")
-    elif data == "cmd_memory":
-        await view_memory(update, context)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     task_command = update.message.text.strip()
@@ -88,7 +70,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "history" not in context.user_data:
         context.user_data["history"] = []
     
-    # Send "NotRa is thinking 🤔" as requested
+    # Clean status message without any memory words
     status_msg = await update.message.reply_text("🤔 NotRa is thinking...")
 
     try:
@@ -123,7 +105,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             history = context.user_data.get("history", [])
             last_url = history[-1]["url"] if history else None
 
-            # Execution Engine using Telegram Memory Context
+            # Execution Logic
             if "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
                 await page.goto("https://www.youtube.com", wait_until="domcontentloaded", timeout=30000)
                 await page.wait_for_timeout(2000)
@@ -179,13 +161,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
             else:
-                # Check if user wants to open the first web/link from the previous Google search result page
                 if ("first" in cmd or "web" in cmd or "link" in cmd or "result" in cmd) and last_url and "google.com/search" in last_url:
-                    # Re-open the last Google Search results page from memory
                     await page.goto(last_url, wait_until="domcontentloaded", timeout=25000)
                     await page.wait_for_timeout(2000)
                     try:
-                        # Click the first search result heading (h3)
                         await page.locator('h3').first.click(force=True)
                         await page.wait_for_timeout(3000)
                     except:
@@ -214,7 +193,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         except:
                             pass
 
-            # --- Scroll & Touch Interaction Engine ---
+            # Scroll & Touch Interaction
             if "scroll down" in cmd:
                 await page.mouse.wheel(0, 800)
                 await page.wait_for_timeout(1500)
@@ -233,13 +212,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             current_url = page.url
             
-            # Save to Telegram User Memory
+            # Silent background saving (invisible to user)
             context.user_data["history"].append({
                 "command": task_command,
                 "url": current_url
             })
             
-            # Screenshot Capture & Send to Telegram
+            # Screenshot Capture & Clean Response
             img_path = f"telegram_shot_{chat_id}.png"
             await page.screenshot(path=img_path, full_page=False)
             await browser.close()
@@ -248,14 +227,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_photo(
                     chat_id=chat_id,
                     photo=photo,
-                    caption=f"✅ **Task Executed Successfully!**\n🌐 **URL:** {current_url}\n🧠 Memory updated in TG Chat!"
+                    caption=f"✅ **Task Executed Successfully!**\n🌐 **URL:** {current_url}"
                 )
             await status_msg.delete()
 
     except Exception as e:
         await status_msg.edit_text(f"❌ Execution Error: {str(e)}")
 
-# Background runner for Streamlit without Signal Handler crash
+# Background runner for Streamlit
 @st.cache_resource
 def run_telegram_bot():
     loop = asyncio.new_event_loop()
@@ -263,11 +242,10 @@ def run_telegram_bot():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("memory", view_memory))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     
     app.run_polling(stop_signals=None)
 
-# Start Bot in Streamlit Instance
+# Start Bot
 run_telegram_bot()
