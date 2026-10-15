@@ -24,14 +24,14 @@ st.set_page_config(page_title="NotRa Telegram Agent", page_icon="🤖")
 
 st.title("🤖 NotRa Telegram Browser Agent Server")
 st.success("🟢 Bot is actively running on Telegram! You can close this tab or keep it open.")
-st.markdown("👉 **Click here to talk to your bot:** [@Notra_aibot](https://t.me/Notra_aibot)")
+st.markdown("👉 **Click here to talk to your bot:** [@Notra_aibot](https://t.me/Notraai_bot)")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "history" not in context.user_data:
         context.user_data["history"] = []
     
     keyboard = [
-        [InlineKeyboardButton("🤖 Open NotRa Bot", url="https://t.me/Notra_aibot")],
+        [InlineKeyboardButton("🤖 Open NotRa Bot", url="https://t.me/Notraai_bot")],
         [InlineKeyboardButton("🔍 Google Search", callback_data="cmd_search"),
          InlineKeyboardButton("🌐 Open Website", callback_data="cmd_open")],
         [InlineKeyboardButton("🎵 YouTube Search", callback_data="cmd_yt_search"),
