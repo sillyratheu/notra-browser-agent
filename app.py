@@ -60,7 +60,7 @@ if st.button("Run Browser Agent"):
 
                     cmd = task_command.lower().strip()
 
-                    # Extract URL using regex (detects domain like ramims.work.gd, site.com, etc.)
+                    # Extract URL using regex
                     url_match = re.search(r'(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', task_command)
                     
                     target_url = None
@@ -94,28 +94,40 @@ if st.button("Run Browser Agent"):
                         try:
                             page.fill('input[name="search_query"]', q)
                             page.keyboard.press('Enter')
-                            page.wait_for_timeout(3000)
+                            page.wait_for_timeout(3500)
                         except:
                             pass
 
+                        # Fix for YouTube video unavailable / safe video selection
                         if "play" in cmd or "video" in cmd:
                             try:
-                                page.locator('ytd-video-renderer a#video-title').first.click()
-                                page.wait_for_timeout(4000)
+                                # Find video links and avoid mixes/shorts if possible, clicking a reliable result index
+                                videos = page.locator('ytd-video-renderer a#video-title')
+                                count = videos.count()
+                                clicked = False
+                                for i in range(min(count, 3)):
+                                    try:
+                                        vid_text = videos.nth(i).inner_text().lower()
+                                        # Skip shorts or live if wanted, or just try clicking
+                                        videos.nth(i).click()
+                                        page.wait_for_timeout(4000)
+                                        clicked = True
+                                        break
+                                    except:
+                                        continue
+                                if not clicked and count > 0:
+                                    videos.first.click()
+                                    page.wait_for_timeout(4000)
                             except:
                                 pass
 
                     elif target_url and not ("search" in cmd and "google" in cmd):
-                        # Direct domain visit with safe fallback
+                        # Strict direct visit without unwanted Google search fallback crash
                         try:
                             page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
-                            page.wait_for_timeout(2000)
-                        except Exception as nav_err:
-                            # If direct domain fails, perform Google Search safely
-                            clean_q = task_command
-                            google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
-                            page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(2500)
+                        except Exception as e:
+                            st.warning(f"⚠️ Could not load direct URL `{target_url}`. Connection might be closed or domain unavailable.")
 
                     else:
                         clean_q = (cmd.replace("search on google", "")
@@ -152,12 +164,15 @@ if st.button("Run Browser Agent"):
 
                     # Auth & Captcha Check
                     current_url = page.url
-                    page_body_text = page.inner_text("body").lower()
+                    try:
+                        page_body_text = page.inner_text("body").lower()
+                    except:
+                        page_body_text = ""
 
                     is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register"])
                     is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human"])
 
-                    if input_user and input_pass:
+                    if input_user and input_pass and is_auth_required:
                         try:
                             page.fill('input[type="email"], input[name*="user"], input[name*="login"]', input_user)
                             page.fill('input[name*="password"], input[type="password"]', input_pass)
@@ -168,7 +183,7 @@ if st.button("Run Browser Agent"):
                     if is_captcha_required:
                         st.error(f"⚠️ **Attention Ramim!** NotRa encountered a Captcha block at: [{current_url}]({current_url}).")
                     elif is_auth_required and not input_user:
-                        st.warning(f"⚠️ **Auth/Sign-up detected:** Provide Username & Password in the sidebar.")
+                        st.warning(f"⚠️ **Auth/Sign-up detected:** Provide Username & Password in the sidebar so NotRa can fill it.")
 
                     # Screenshot
                     img1 = "step1.png"
