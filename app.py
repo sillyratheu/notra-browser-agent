@@ -1,263 +1,193 @@
-import streamlit as st
-from playwright.sync_api import sync_playwright
 import os
-import requests
 import re
+import requests
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from playwright.sync_api import sync_playwright
 
-if "browser_installed" not in st.session_state:
+# New Bot Token provided by Ramim
+BOT_TOKEN = "8718050320:AAEMSjaDMAZttACJwEXgMM-bXBtvkhdVEkc"
+
+# Ensure playwright chromium is installed
+if not os.path.exists("/tmp/playwright_installed"):
     try:
         os.system("playwright install chromium")
+        with open("/tmp/playwright_installed", "w") as f:
+            f.write("installed")
     except:
         pass
-    st.session_state.browser_installed = True
 
-st.set_page_config(page_title="NotRa Browser Agent", page_icon="🤖", layout="wide")
-
-st.title("🤖 NotRa Autonomous Browser Agent")
-st.caption("🟢 Built and Owned exclusively by Ramim • Advanced Smart Intent Engine")
-
-if "action_history" not in st.session_state:
-    st.session_state.action_history = []
-
-# Sidebar for Login & Google Auth Helper
-with st.sidebar:
-    st.header("🔑 Login & Auth Helper")
-    st.markdown("Kono site-e login ba sign-up lagbe, ekhane info diye dile agent automatic fill-up korbe.")
-    input_user = st.text_input("Username / Email")
-    input_pass = st.text_input("Password", type="password")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("🤖 Open NotRa Bot", url="https://t.me/Notra_aibot")],
+        [InlineKeyboardButton("🔍 Google Search", callback_data="cmd_search"),
+         InlineKeyboardButton("🌐 Open Website", callback_data="cmd_open")],
+        [InlineKeyboardButton("🎵 YouTube Search", callback_data="cmd_yt_search"),
+         InlineKeyboardButton("▶️ Play YT Video", callback_data="cmd_yt_play")],
+        [InlineKeyboardButton("🚀 Do Task / Signup", callback_data="cmd_task")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    st.markdown("---")
-    st.header("🌐 Google Account Helper")
-    st.markdown("Jodi kono site-e 'Sign in with Google' ba Gmail diye login korte hoy:")
-    google_email = st.text_input("Google Email (Gmail)")
-    google_pass = st.text_input("Google Password", type="password")
+    welcome_msg = (
+        "🤖 **Welcome to NotRa Telegram Browser Agent!**\n"
+        "🟢 Built and Owned exclusively by Ramim\n\n"
+        "Niche command select karo ba direct likhe pathao! Ar upore **'Open NotRa Bot'** button-e click kore sohoje redirect korte parbe[span_1](start_span)[span_1](end_span)."
+    )
+    await update.message.reply_text(welcome_msg, parse_mode="Markdown", reply_markup=reply_markup)
 
-# Generic Command Helper Menu
-st.markdown("### ⚡ Command Helper Menu")
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+    if data == "cmd_search":
+        await query.message.reply_text("💡 Type your search query like: `search python programming`")
+    elif data == "cmd_open":
+        await query.message.reply_text("💡 Type website to open like: `open github.com`")
+    elif data == "cmd_yt_search":
+        await query.message.reply_text("💡 Type YouTube search like: `search on youtube lofi music`")
+    elif data == "cmd_yt_play":
+        await query.message.reply_text("💡 Type YouTube play command like: `play lofi on youtube`")
+    elif data == "cmd_task":
+        await query.message.reply_text("💡 Type task command like: `open topsurvey.app and create account`")
 
-preset_options = [
-    "-- Select Command Type --",
-    "Google Search - [enter query]",
-    "Open Website - [enter domain.com]",
-    "YouTube Search - [enter video/song]",
-    "Play YouTube Video - [enter title]",
-    "Do Task - [open site & sign up]"
-]
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    task_command = update.message.text.strip()
+    chat_id = update.message.chat_id
+    
+    status_msg = await update.message.reply_text("⏳ NotRa is executing your command intelligently...")
 
-selected_preset = st.selectbox("Choose Command Template:", preset_options)
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox"
+                ]
+            )
 
-preset_mapping = {
-    "Google Search - [enter query]": "search ",
-    "Open Website - [enter domain.com]": "open ",
-    "YouTube Search - [enter video/song]": "search on youtube ",
-    "Play YouTube Video - [enter title]": "play on youtube ",
-    "Do Task - [open site & sign up]": "open site and create account "
-}
+            context_browser = browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            )
+            page = context_browser.new_page()
 
-default_cmd_value = preset_mapping.get(selected_preset, "") if selected_preset != "-- Select Command Type --" else ""
+            cmd = task_command.lower()
 
-# Main Command Box
-task_command = st.text_input("Enter clean command (e.g., 'play lofi on youtube', 'open github.com'):", value=default_cmd_value)
+            # URL Extraction
+            url_match = re.search(r'(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', task_command)
+            target_url = None
+            if url_match:
+                matched_str = url_match.group(0).rstrip(".,!?;'")
+                if not matched_str.startswith("http"):
+                    target_url = "https://" + matched_str
+                else:
+                    target_url = matched_str
 
-col1, col2 = st.columns(2)
-with col1:
-    user_action = st.selectbox("Extra Action:", ["None", "Scroll Down", "Scroll Up", "Click First Result", "Go Back"])
-with col2:
-    custom_click_text = st.text_input("Or Click Element by Text (optional):", "")
+            # Execution Engine
+            if "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
+                page.goto("https://www.youtube.com", wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(2000)
 
-if st.button("Run Browser Agent"):
-    if not task_command:
-        st.warning("Please enter a command first!")
-    else:
-        st.session_state.action_history = []
-        with st.spinner("NotRa is executing your command intelligently..."):
-            try:
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(
-                        headless=True,
-                        args=[
-                            "--disable-blink-features=AutomationControlled",
-                            "--no-sandbox",
-                            "--disable-setuid-sandbox"
-                        ]
-                    )
+                q = (cmd.replace("open youtube", "")
+                        .replace("search on youtube", "")
+                        .replace("youtube", "")
+                        .replace("yt", "")
+                        .replace("play", "")
+                        .replace("open", "")
+                        .replace("search", "")
+                        .replace("video", "")
+                        .replace("the", "")
+                        .replace("first", "")
+                        .replace("on", "")
+                        .strip())
 
-                    context = browser.new_context(
-                        viewport={"width": 1280, "height": 800},
-                        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-                    )
-                    page = context.new_page()
+                if not q: q = "lofi music"
 
-                    cmd = task_command.lower().strip()
+                try:
+                    page.fill('input[name="search_query"]', q)
+                    page.keyboard.press('Enter')
+                    page.wait_for_timeout(3500)
+                except:
+                    pass
 
-                    # Regex match for domain/URL
-                    url_match = re.search(r'(https?://[^\s]+|[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', task_command)
-                    target_url = None
-                    if url_match:
-                        matched_str = url_match.group(0).rstrip(".,!?;'")
-                        if not matched_str.startswith("http"):
-                            target_url = "https://" + matched_str
-                        else:
-                            target_url = matched_str
-
-                    # Execution flow
-                    if "youtube" in cmd or "yt" in cmd or "play" in cmd or "video" in cmd:
-                        page.goto("https://www.youtube.com", wait_until="domcontentloaded", timeout=30000)
-                        page.wait_for_timeout(2000)
-
-                        q = (cmd.replace("open youtube", "")
-                                .replace("search on youtube", "")
-                                .replace("youtube", "")
-                                .replace("yt", "")
-                                .replace("play", "")
-                                .replace("open", "")
-                                .replace("search", "")
-                                .replace("video", "")
-                                .replace("the", "")
-                                .replace("first", "")
-                                .replace("on", "")
-                                .strip())
-
-                        if not q:
-                            q = "lofi music"
-
-                        try:
-                            page.fill('input[name="search_query"]', q)
-                            page.keyboard.press('Enter')
-                            page.wait_for_timeout(3500)
-                        except:
-                            pass
-
-                        if "play" in cmd or "video" in cmd:
-                            try:
-                                videos = page.locator('ytd-video-renderer a#video-title')
-                                count = videos.count()
-                                clicked = False
-                                for i in range(min(count, 4)):
-                                    try:
-                                        videos.nth(i).click()
-                                        page.wait_for_timeout(4000)
-                                        clicked = True
-                                        break
-                                    except:
-                                        continue
-                                if not clicked and count > 0:
-                                    videos.first.click()
-                                    page.wait_for_timeout(4000)
-                            except:
-                                pass
-
-                    elif target_url and not ("search" in cmd and "google" in cmd):
-                        try:
-                            page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
-                            page.wait_for_timeout(2500)
-                        except Exception as e:
-                            st.error(f"⚠️ Could not load `{target_url}`. Domain offline or connection error.")
-                            browser.close()
-                            st.stop()
-
-                    else:
-                        clean_q = (cmd.replace("search on google", "")
-                                      .replace("google", "")
-                                      .replace("search", "")
-                                      .replace("open", "")
-                                      .replace("find", "")
-                                      .strip())
-                        if not clean_q:
-                            clean_q = task_command
-
-                        google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
-                        page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
-                        page.wait_for_timeout(2000)
-
-                        if "open website" in cmd or "go to site" in cmd or "make an account" in cmd or "create account" in cmd:
-                            try:
-                                page.locator('h3').first.click()
-                                page.wait_for_timeout(3000)
-                            except:
-                                pass
-
-                    # Extra actions
-                    if user_action == "Scroll Down" or "scroll down" in cmd:
-                        page.mouse.wheel(0, 800)
-                        page.wait_for_timeout(1000)
-                    elif user_action == "Scroll Up":
-                        page.mouse.wheel(0, -800)
-                        page.wait_for_timeout(1000)
-                    elif user_action == "Click First Result":
-                        try:
-                            page.locator('h3, ytd-video-renderer #video-title').first.click()
-                            page.wait_for_timeout(2500)
-                        except:
-                            pass
-                    elif custom_click_text:
-                        try:
-                            page.get_by_text(custom_click_text, exact=False).first.click()
-                            page.wait_for_timeout(2500)
-                        except:
-                            pass
-
-                    # Google Login / Sign-in Helper Integration
-                    current_url = page.url
+                if "play" in cmd or "video" in cmd:
                     try:
-                        page_body_text = page.inner_text("body").lower()
+                        videos = page.locator('ytd-video-renderer a#video-title')
+                        count = videos.count()
+                        clicked = False
+                        for i in range(min(count, 4)):
+                            try:
+                                videos.nth(i).click()
+                                page.wait_for_timeout(4000)
+                                clicked = True
+                                break
+                            except:
+                                continue
+                        if not clicked and count > 0:
+                            videos.first.click()
+                            page.wait_for_timeout(4000)
                     except:
-                        page_body_text = ""
+                        pass
 
-                    is_auth_required = any(k in current_url.lower() or k in page_body_text for k in ["login", "signin", "signup", "register", "create account"])
-                    is_google_login = any(k in page_body_text for k in ["continue with google", "sign in with google", "google login", "login with google"])
-                    is_captcha_required = any(k in page_body_text for k in ["captcha", "robot", "verify you are human", "challenge"])
-
-                    # If Google sign-in button is present and user provided Google credentials
-                    if is_google_login and google_email:
-                        try:
-                            page.get_by_text("google", exact=False).first.click()
-                            page.wait_for_timeout(3000)
-                            # Handle Google popup or redirection input if field available
-                            page.fill('input[type="email"]', google_email)
-                            page.keyboard.press('Enter')
-                            page.wait_for_timeout(2000)
-                            if google_pass:
-                                page.fill('input[type="password"]', google_pass)
-                                page.keyboard.press('Enter')
-                                page.wait_for_timeout(3000)
-                        except:
-                            pass
-
-                    # Standard auto-fill if normal signup/login form exists
-                    elif input_user and input_pass and is_auth_required:
-                        try:
-                            page.fill('input[type="email"], input[name*="user"], input[name*="login"], input[placeholder*="email" i]', input_user)
-                            page.fill('input[name*="password"], input[type="password"], input[placeholder*="password" i]', input_pass)
-                            page.wait_for_timeout(1000)
-                        except:
-                            pass
-
-                    if is_captcha_required:
-                        st.error(f"⚠️ **Attention Ramim!** Captcha block encountered at: [{current_url}]({current_url}).")
-                    elif is_auth_required and not input_user and not google_email:
-                        st.warning(f"⚠️ **Auth/Sign-up page detected:** Provide Username/Password or Google credentials in the sidebar.")
-
-                    # Screenshot
-                    img1 = "step1.png"
-                    page.screenshot(path=img1, full_page=False)
-                    st.session_state.action_history.append((f"Task executed successfully (URL: {current_url})", img1))
-
+            elif target_url and not ("search" in cmd and "google" in cmd):
+                try:
+                    page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
+                    page.wait_for_timeout(2500)
+                except Exception as e:
+                    await status_msg.edit_text(f"⚠️ Could not load `{target_url}`. Domain offline or connection error.")
                     browser.close()
-                    st.success("Task processed successfully by NotRa!")
+                    return
 
-            except Exception as e:
-                st.error(f"Agent Execution Error: {e}")
+            else:
+                clean_q = (cmd.replace("search on google", "")
+                              .replace("google", "")
+                              .replace("search", "")
+                              .replace("open", "")
+                              .replace("find", "")
+                              .strip())
+                if not clean_q: clean_q = task_command
 
-# Live Stream Window Display
-st.subheader("🖥️ Live Browser Action Stream")
-if st.button("🔄 Refresh Live View"):
-    st.rerun()
+                google_url = f"https://www.google.com/search?q={requests.utils.quote(clean_q)}"
+                page.goto(google_url, wait_until="domcontentloaded", timeout=25000)
+                page.wait_for_timeout(2000)
 
-if st.session_state.action_history:
-    desc, img_p = st.session_state.action_history[-1]
-    st.markdown(f"**Status:** {desc}")
-    if os.path.exists(img_p):
-        st.image(img_p, caption=desc, use_container_width=True)
-else:
-    st.info("Execute a task above to see the live browser view.")
+                if "open website" in cmd or "go to site" in cmd or "make an account" in cmd:
+                    try:
+                        page.locator('h3').first.click()
+                        page.wait_for_timeout(3000)
+                    except:
+                        pass
+
+            current_url = page.url
+            
+            # Screenshot Capture & Send to Telegram
+            img_path = f"telegram_shot_{chat_id}.png"
+            page.screenshot(path=img_path, full_page=False)
+            browser.close()
+
+            with open(img_path, "rb") as photo:
+                await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo,
+                    caption=f"✅ **Task Executed Successfully!**\n🌐 **URL:** {current_url}"
+                )
+            await status_msg.delete()
+
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Execution Error: {str(e)}")
+
+def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    
+    print("🤖 Telegram Bot is running...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
