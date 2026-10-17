@@ -1,119 +1,114 @@
 const express = require('express');
-const axios = require('axios');
-const path = require('path');
-const fs = require('fs');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'monitors.json');
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// Set your Streamlit VNC App URL here
+const TARGET_URL = process.env.TARGET_URL || 'https://notyourpcoooo.streamlit.app';
 
-function loadMonitors() {
-  if (fs.existsSync(DATA_FILE)) {
-    try {
-      const data = fs.readFileSync(DATA_FILE, 'utf8');
-      return JSON.parse(data);
-    } catch (err) {
-      console.error("Error reading data file:", err);
-      return [];
-    }
-  }
-  return [];
-}
+let lastStatus = {
+  status: 'PENDING',
+  lastChecked: 'Not checked yet',
+  responseTime: 'N/A'
+};
 
-function saveMonitors(monitors) {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(monitors, null, 2), 'utf8');
-  } catch (err) {
-      console.error("Error saving data file:", err);
-  }
-}
-
-let monitors = loadMonitors();
-
-async function simulateUserVisit(monitor) {
+async function visitStreamlitApp() {
+  let browser = null;
   const startTime = Date.now();
+  console.log(`[${new Date().toLocaleTimeString()}] Visiting Streamlit VNC PC...`);
 
   try {
-    // Direct request to main URL with browser headers and flexible status validation
-    const response = await axios.get(monitor.url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5'
-      },
-      timeout: 15000,
-      validateStatus: function (status) {
-        return status < 500; // Accept any status below 500 (Treats 200, 302, 403 as UP because the server is alive)
-      }
+    // Ultra-lightweight Chrome flags optimized for Render's 512MB RAM
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process'
+      ]
     });
-    
-    const responseTime = Date.now() - startTime;
-    
-    monitor.status = 'UP';
-    monitor.statusCode = response.status;
-    monitor.lastChecked = new Date().toISOString();
-    monitor.responseTime = `${responseTime}ms`;
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 720 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+
+    // 1. Open Streamlit VNC App
+    await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 45000 });
+
+    // 2. Simulate User Interaction (Scroll down)
+    await page.evaluate(() => {
+      window.scrollBy(0, 200);
+    });
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // 3. Simulate User Interaction (Click on page)
+    await page.mouse.click(150, 150);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    const duration = Date.now() - startTime;
+    lastStatus = {
+      status: 'ACTIVE 24/7',
+      lastChecked: new Date().toLocaleTimeString(),
+      responseTime: `${duration}ms`
+    };
+
+    console.log(`[SUCCESS] Visited and interacted with Streamlit VNC PC successfully in ${duration}ms!`);
 
   } catch (error) {
-    console.error(`Ping failed for ${monitor.url}:`, error.message);
-    monitor.status = 'DOWN';
-    monitor.statusCode = error.response ? error.response.status : 'ERR';
-    monitor.lastChecked = new Date().toISOString();
-    monitor.responseTime = 'N/A';
+    console.error(`[ERROR] Failed to visit Streamlit app:`, error.message);
+    lastStatus = {
+      status: 'ERROR',
+      lastChecked: new Date().toLocaleTimeString(),
+      responseTime: 'N/A'
+    };
   } finally {
-    saveMonitors(monitors);
+    if (browser) {
+      await browser.close(); // Crucial: Free memory immediately
+    }
   }
 }
 
-setInterval(() => {
-  const now = Date.now();
-  monitors.forEach(monitor => {
-    const intervalMs = monitor.interval * 60 * 1000;
-    if (!monitor.lastCheckedTime || (now - monitor.lastCheckedTime >= intervalMs)) {
-      monitor.lastCheckedTime = now;
-      simulateUserVisit(monitor);
-    }
-  });
-}, 10000);
+// Run user simulation every 2 minutes (120,000 ms)
+setInterval(visitStreamlitApp, 2 * 60 * 1000);
 
-app.get('/api/monitors', (req, res) => {
-  res.json(monitors);
-});
+// Run initial visit 5 seconds after boot up
+setTimeout(visitStreamlitApp, 5000);
 
-app.post('/api/monitors', (req, res) => {
-  const { name, url, interval } = req.body;
-  if (!name || !url || !interval) {
-    return res.status(400).json({ error: 'All fields are required!' });
-  }
-
-  const parsedInterval = Math.max(1, Math.min(60, parseInt(interval)));
-  
-  const newMonitor = {
-    id: Date.now().toString(),
-    name,
-    url,
-    interval: parsedInterval,
-    status: 'PENDING',
-    statusCode: '-',
-    lastChecked: null,
-    responseTime: '-'
-  };
-
-  monitors.push(newMonitor);
-  saveMonitors(newMonitor);
-  simulateUserVisit(newMonitor);
-  res.status(201).json(newMonitor);
-});
-
-app.delete('/api/monitors/:id', (req, res) => {
-  monitors = monitors.filter(m => m.id !== req.params.id);
-  saveMonitors(monitors);
-  res.json({ success: true });
+// Dashboard / Health Check Endpoint
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Streamlit Keeper Service</title>
+      <style>
+        body { font-family: Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 40px; text-align: center; }
+        .card { background: #1e293b; padding: 30px; border-radius: 12px; display: inline-block; max-width: 500px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        h1 { color: #38bdf8; font-size: 1.8rem; }
+        .status { padding: 8px 16px; border-radius: 6px; font-weight: bold; background: #166534; color: #4ade80; display: inline-block; margin: 10px 0; }
+        p { margin: 8px 0; color: #94a3b8; }
+        a { color: #38bdf8; text-decoration: none; word-break: break-all; }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h1>🚀 Streamlit PC Keeper</h1>
+        <p>Target App: <a href="${TARGET_URL}" target="_blank">${TARGET_URL}</a></p>
+        <div class="status">${lastStatus.status}</div>
+        <p><strong>Last Check:</strong> ${lastStatus.lastChecked}</p>
+        <p><strong>Response Time:</strong> ${lastStatus.responseTime}</p>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
 app.listen(PORT, () => {
-  console.log(`NotRa Uptime is running on port ${PORT}`);
+  console.log(`Keeper Service is running on port ${PORT}`);
 });
