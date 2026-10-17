@@ -17,11 +17,12 @@ async function pingStreamlitApp() {
   console.log(`[${new Date().toLocaleTimeString()}] Pinging Streamlit VNC PC...`);
 
   try {
-    // Send a lightweight HTTP GET request to keep the app awake
+    // Send lightweight HTTP GET request with maxRedirects allowed to avoid loop error
     await axios.get(TARGET_URL, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) StreamlitKeeper/1.0'
       },
+      maxRedirects: 5,
       timeout: 15000
     });
 
