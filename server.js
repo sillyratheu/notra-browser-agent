@@ -36,7 +36,7 @@ function saveMonitors(monitors) {
 
 let monitors = loadMonitors();
 
-// Real user simulation using Puppeteer with fallback HTTP ping
+// Real user simulation using Puppeteer optimized for Streamlit
 async function simulateUserVisit(monitor) {
   let browser = null;
   const startTime = Date.now();
@@ -64,18 +64,21 @@ async function simulateUserVisit(monitor) {
     await page.setViewport({ width: 1280, height: 800 });
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
-    // 1. Visit the web app URL
-    await page.goto(monitor.url, { waitUntil: 'networkidle2', timeout: 45000 });
+    // 1. Visit the Streamlit / Web app URL with extended timeout (60 seconds)
+    await page.goto(monitor.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+    // Wait extra 5 seconds for Streamlit WebSocket & Components to fully mount
+    await new Promise(r => setTimeout(r, 5000));
 
     // 2. Simulate human scroll action
     await page.evaluate(() => {
-      window.scrollBy(0, 300);
+      window.scrollBy(0, 400);
     });
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 2000));
 
     // 3. Simulate click interaction on page body
-    await page.mouse.click(200, 200);
-    await new Promise(r => setTimeout(r, 1500));
+    await page.mouse.click(300, 300);
+    await new Promise(r => setTimeout(r, 2000));
 
     const responseTime = Date.now() - startTime;
     
@@ -86,22 +89,27 @@ async function simulateUserVisit(monitor) {
 
   } catch (error) {
     console.error(`Puppeteer failed for ${monitor.url}:`, error.message);
-    console.log(`Trying fallback HTTP request for ${monitor.url}...`);
+    console.log(`Trying specialized Streamlit health check / HTTP fallback for ${monitor.url}...`);
 
-    // Fallback to lightweight HTTP GET request if browser launch fails
+    // Streamlit specific health check endpoint fallback
+    let targetUrl = monitor.url;
+    if (targetUrl.includes('streamlit.app') && !targetUrl.includes('_stcore/health')) {
+      targetUrl = targetUrl.endsWith('/') ? `${targetUrl}_stcore/health` : `${targetUrl}/_stcore/health`;
+    }
+
     try {
-      const response = await axios.get(monitor.url, {
+      const response = await axios.get(targetUrl, {
         headers: {
           'User-Agent': 'NotRa-Uptime-Bot/1.0 (+https://notra-uptime.onrender.com)'
         },
-        timeout: 10000
+        timeout: 15000
       });
       const responseTime = Date.now() - startTime;
 
       monitor.status = 'UP';
       monitor.statusCode = response.status;
       monitor.lastChecked = new Date().toLocaleTimeString();
-      monitor.responseTime = `${responseTime}ms (Fallback)`;
+      monitor.responseTime = `${responseTime}ms (Streamlit Alive)`;
     } catch (axiosError) {
       console.error(`Fallback also failed for ${monitor.url}:`, axiosError.message);
       monitor.status = 'DOWN';
@@ -158,7 +166,7 @@ app.post('/api/monitors', (req, res) => {
   };
 
   monitors.push(newMonitor);
-  saveMonitors(newMonitor);
+  saveMonitors(monitors);
   simulateUserVisit(newMonitor);
   res.status(201).json(newMonitor);
 });
