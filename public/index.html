@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NotRa Uptime Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: #0f172a; color: #f8fafc; padding: 20px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { color: #38bdf8; margin-bottom: 20px; font-size: 2rem; display: flex; align-items: center; gap: 10px; }
+    .card { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+    .form-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+    input, select, button { padding: 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; outline: none; }
+    input[type="text"], input[type="url"] { flex: 1; min-width: 200px; }
+    button { background: #0284c7; color: white; font-weight: bold; cursor: pointer; border: none; transition: 0.2s; }
+    button:hover { background: #0369a1; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid #334155; }
+    th { color: #94a3b8; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; }
+    .badge-up { background: #166534; color: #4ade80; }
+    .badge-down { background: #991b1b; color: #fca5a5; }
+    .badge-pending { background: #854d0e; color: #fef08a; }
+    .btn-delete { background: #dc2626; padding: 6px 12px; font-size: 0.85rem; }
+    .btn-delete:hover { background: #b91c1c; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 NotRa Uptime Dashboard</h1>
+
+    <!-- Add Monitor Form -->
+    <div class="card">
+      <h3>Add New Monitor</h3>
+      <form id="monitorForm" class="form-group">
+        <input type="text" id="name" placeholder="Website Name (e.g. My App)" required>
+        <input type="url" id="url" placeholder="https://your-app.streamlit.app" required>
+        <select id="interval">
+          <option value="1">Every 1 min</option>
+          <option value="2">Every 2 min</option>
+          <option value="5" selected>Every 5 min</option>
+          <option value="10">Every 10 min</option>
+          <option value="15">Every 15 min</option>
+          <option value="30">Every 30 min</option>
+          <option value="60">Every 60 min</option>
+        </select>
+        <button type="submit">Add Monitor</button>
+      </form>
+    </div>
+
+    <!-- Active Monitors List -->
+    <div class="card">
+      <h3>Monitored Websites</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>URL</th>
+            <th>Interval</th>
+            <th>Status</th>
+            <th>Last Checked</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="monitorList">
+          <!-- Dynamic Content -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('monitorForm');
+    const monitorList = document.getElementById('monitorList');
+
+    async function loadMonitors() {
+      const res = await fetch('/api/monitors');
+      const data = await res.json();
+      
+      monitorList.innerHTML = data.map(m => `
+        <tr>
+          <td><strong>${m.name}</strong></td>
+          <td><a href="${m.url}" target="_blank" style="color: #38bdf8;">${m.url}</a></td>
+          <td>${m.interval}m</td>
+          <td><span class="badge badge-${m.status.toLowerCase()}">${m.status}</span></td>
+          <td>${m.lastChecked}</td>
+          <td><button class="btn-delete" onclick="deleteMonitor('${m.id}')">Delete</button></td>
+        </tr>
+      `).join('');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value;
+      const url = document.getElementById('url').value;
+      const interval = document.getElementById('interval').value;
+
+      await fetch('/api/monitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, url, interval })
+      });
+
+      form.reset();
+      loadMonitors();
+    });
+
+    async function deleteMonitor(id) {
+      await fetch(`/api/monitors/${id}`, { method: 'DELETE' });
+      loadMonitors();
+    }
+
+    setInterval(loadMonitors, 5000);
+    loadMonitors();
+  </script>
+</body>
+</html>
