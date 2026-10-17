@@ -1,13 +1,13 @@
 {
   "name": "streamlit-keeper",
   "version": "1.0.0",
-  "description": "Background service to maintain active sessions for web tools.",
+  "description": "Lightweight web ping service",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "puppeteer": "^22.6.0"
+    "axios": "^1.6.8",
+    "express": "^4.19.2"
   }
 }
