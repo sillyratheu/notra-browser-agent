@@ -1,0 +1,13 @@
+{
+  "name": "notra-uptime",
+  "version": "1.0.0",
+  "description": "A lightweight web monitoring utility service.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "puppeteer": "^22.6.0"
+  }
+}
