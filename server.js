@@ -36,19 +36,18 @@ let monitors = loadMonitors();
 async function simulateUserVisit(monitor) {
   const startTime = Date.now();
 
-  let targetUrl = monitor.url;
-  if (targetUrl.includes('streamlit.app') && !targetUrl.includes('_stcore/health')) {
-    targetUrl = targetUrl.endsWith('/') ? `${targetUrl}_stcore/health` : `${targetUrl}/_stcore/health`;
-  }
-
   try {
-    const response = await axios.get(targetUrl, {
+    // Direct request to main URL with browser headers and flexible status validation
+    const response = await axios.get(monitor.url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5'
       },
-      timeout: 15000
+      timeout: 15000,
+      validateStatus: function (status) {
+        return status < 500; // Accept any status below 500 (Treats 200, 302, 403 as UP because the server is alive)
+      }
     });
     
     const responseTime = Date.now() - startTime;
@@ -104,7 +103,7 @@ app.post('/api/monitors', (req, res) => {
   };
 
   monitors.push(newMonitor);
-  saveMonitors(monitors);
+  saveMonitors(newMonitor);
   simulateUserVisit(newMonitor);
   res.status(201).json(newMonitor);
 });
