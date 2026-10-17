@@ -1,10 +1,9 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Set your Streamlit VNC App URL here
 const TARGET_URL = process.env.TARGET_URL || 'https://notyourpcoooo.streamlit.app';
 
 let lastStatus = {
@@ -13,43 +12,18 @@ let lastStatus = {
   responseTime: 'N/A'
 };
 
-async function visitStreamlitApp() {
-  let browser = null;
+async function pingStreamlitApp() {
   const startTime = Date.now();
-  console.log(`[${new Date().toLocaleTimeString()}] Visiting Streamlit VNC PC...`);
+  console.log(`[${new Date().toLocaleTimeString()}] Pinging Streamlit VNC PC...`);
 
   try {
-    // Ultra-lightweight Chrome flags optimized for Render's 512MB RAM
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process'
-      ]
+    // Send a lightweight HTTP GET request to keep the app awake
+    await axios.get(TARGET_URL, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) StreamlitKeeper/1.0'
+      },
+      timeout: 15000
     });
-
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 720 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-
-    // 1. Open Streamlit VNC App
-    await page.goto(TARGET_URL, { waitUntil: 'networkidle2', timeout: 45000 });
-
-    // 2. Simulate User Interaction (Scroll down)
-    await page.evaluate(() => {
-      window.scrollBy(0, 200);
-    });
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // 3. Simulate User Interaction (Click on page)
-    await page.mouse.click(150, 150);
-    await new Promise(resolve => setTimeout(resolve, 1500));
 
     const duration = Date.now() - startTime;
     lastStatus = {
@@ -58,29 +32,24 @@ async function visitStreamlitApp() {
       responseTime: `${duration}ms`
     };
 
-    console.log(`[SUCCESS] Visited and interacted with Streamlit VNC PC successfully in ${duration}ms!`);
+    console.log(`[SUCCESS] Pinged Streamlit successfully in ${duration}ms!`);
 
   } catch (error) {
-    console.error(`[ERROR] Failed to visit Streamlit app:`, error.message);
+    console.error(`[ERROR] Failed to ping Streamlit app:`, error.message);
     lastStatus = {
       status: 'ERROR',
       lastChecked: new Date().toLocaleTimeString(),
       responseTime: 'N/A'
     };
-  } finally {
-    if (browser) {
-      await browser.close(); // Crucial: Free memory immediately
-    }
   }
 }
 
-// Run user simulation every 2 minutes (120,000 ms)
-setInterval(visitStreamlitApp, 2 * 60 * 1000);
+// Run ping every 2 minutes
+setInterval(pingStreamlitApp, 2 * 60 * 1000);
 
-// Run initial visit 5 seconds after boot up
-setTimeout(visitStreamlitApp, 5000);
+// Run initial ping 3 seconds after boot up
+setTimeout(pingStreamlitApp, 3000);
 
-// Dashboard / Health Check Endpoint
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
