@@ -1,5 +1,6 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
+const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 
@@ -35,15 +36,16 @@ function saveMonitors(monitors) {
 
 let monitors = loadMonitors();
 
-// Real user simulation using Puppeteer
+// Real user simulation using Puppeteer with fallback HTTP ping
 async function simulateUserVisit(monitor) {
   let browser = null;
-  try {
-    const startTime = Date.now();
+  const startTime = Date.now();
 
+  try {
     // Launch lightweight Puppeteer browser instance
     browser = await puppeteer.launch({
       headless: 'new',
+      executablePath: process.env.PUPPETEER_EXEC_PATH || null,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -83,14 +85,37 @@ async function simulateUserVisit(monitor) {
     monitor.responseTime = `${responseTime}ms`;
 
   } catch (error) {
-    console.error(`Simulation failed for ${monitor.url}:`, error.message);
-    monitor.status = 'DOWN';
-    monitor.statusCode = 'ERR';
-    monitor.lastChecked = new Date().toLocaleTimeString();
-    monitor.responseTime = 'N/A';
+    console.error(`Puppeteer failed for ${monitor.url}:`, error.message);
+    console.log(`Trying fallback HTTP request for ${monitor.url}...`);
+
+    // Fallback to lightweight HTTP GET request if browser launch fails
+    try {
+      const response = await axios.get(monitor.url, {
+        headers: {
+          'User-Agent': 'NotRa-Uptime-Bot/1.0 (+https://notra-uptime.onrender.com)'
+        },
+        timeout: 10000
+      });
+      const responseTime = Date.now() - startTime;
+
+      monitor.status = 'UP';
+      monitor.statusCode = response.status;
+      monitor.lastChecked = new Date().toLocaleTimeString();
+      monitor.responseTime = `${responseTime}ms (Fallback)`;
+    } catch (axiosError) {
+      console.error(`Fallback also failed for ${monitor.url}:`, axiosError.message);
+      monitor.status = 'DOWN';
+      monitor.statusCode = 'ERR';
+      monitor.lastChecked = new Date().toLocaleTimeString();
+      monitor.responseTime = 'N/A';
+    }
   } finally {
     if (browser) {
-      await browser.close(); // Always close browser to free RAM
+      try {
+        await browser.close();
+      } catch (e) {
+        // Ignore close errors
+      }
     }
     saveMonitors(monitors);
   }
@@ -133,7 +158,7 @@ app.post('/api/monitors', (req, res) => {
   };
 
   monitors.push(newMonitor);
-  saveMonitors(monitors);
+  saveMonitors(newMonitor);
   simulateUserVisit(newMonitor);
   res.status(201).json(newMonitor);
 });
