@@ -10,7 +10,6 @@ const DATA_FILE = path.join(__dirname, 'monitors.json');
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Load stored monitors
 function loadMonitors() {
   if (fs.existsSync(DATA_FILE)) {
     try {
@@ -24,7 +23,6 @@ function loadMonitors() {
   return [];
 }
 
-// Save monitors to JSON file
 function saveMonitors(monitors) {
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(monitors, null, 2), 'utf8');
@@ -35,11 +33,9 @@ function saveMonitors(monitors) {
 
 let monitors = loadMonitors();
 
-// Optimized Fast Ping for Streamlit & Web Apps
 async function simulateUserVisit(monitor) {
   const startTime = Date.now();
 
-  // If it's a Streamlit app, target its internal health check endpoint for guaranteed UP status
   let targetUrl = monitor.url;
   if (targetUrl.includes('streamlit.app') && !targetUrl.includes('_stcore/health')) {
     targetUrl = targetUrl.endsWith('/') ? `${targetUrl}_stcore/health` : `${targetUrl}/_stcore/health`;
@@ -48,7 +44,9 @@ async function simulateUserVisit(monitor) {
   try {
     const response = await axios.get(targetUrl, {
       headers: {
-        'User-Agent': 'NotRa-Uptime-Bot/1.0 (+https://notra-uptime.onrender.com)'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5'
       },
       timeout: 15000
     });
@@ -57,21 +55,20 @@ async function simulateUserVisit(monitor) {
     
     monitor.status = 'UP';
     monitor.statusCode = response.status;
-    monitor.lastChecked = new Date().toLocaleTimeString();
+    monitor.lastChecked = new Date().toISOString();
     monitor.responseTime = `${responseTime}ms`;
 
   } catch (error) {
     console.error(`Ping failed for ${monitor.url}:`, error.message);
     monitor.status = 'DOWN';
     monitor.statusCode = error.response ? error.response.status : 'ERR';
-    monitor.lastChecked = new Date().toLocaleTimeString();
+    monitor.lastChecked = new Date().toISOString();
     monitor.responseTime = 'N/A';
   } finally {
     saveMonitors(monitors);
   }
 }
 
-// Timer check for intervals
 setInterval(() => {
   const now = Date.now();
   monitors.forEach(monitor => {
@@ -83,7 +80,6 @@ setInterval(() => {
   });
 }, 10000);
 
-// API Routes
 app.get('/api/monitors', (req, res) => {
   res.json(monitors);
 });
@@ -103,7 +99,7 @@ app.post('/api/monitors', (req, res) => {
     interval: parsedInterval,
     status: 'PENDING',
     statusCode: '-',
-    lastChecked: 'Not checked yet',
+    lastChecked: null,
     responseTime: '-'
   };
 
